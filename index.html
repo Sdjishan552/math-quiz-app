@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1117" />
+  <meta name="description" content="Adaptive MCQ math practice with weak question tracking" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Math Practice App</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">∑</span>
+      MathQuiz
+    </div>
+    <span class="logo-sub">Adaptive Practice Engine</span>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- HOME SCREEN                                           -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-home" class="screen">
+
+    <!-- Stats overview -->
+    <div class="home-card">
+      <h2>Your Progress</h2>
+      <div class="stats-row">
+        <div class="stat-box">
+          <span class="stat-val" id="stat-total">—</span>
+          <span class="stat-label">Total Qs</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val" id="stat-attempted">0</span>
+          <span class="stat-label">Attempted</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-val" id="stat-weak" style="color:var(--red)">0</span>
+          <span class="stat-label">Weak Qs</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Upload Question Bank ── -->
+    <div class="home-card upload-card" id="upload-card">
+      <div class="upload-header">
+        <div>
+          <h2>Question Bank</h2>
+          <p class="upload-sub" id="bank-status">Using built-in questions</p>
+        </div>
+        <div class="upload-source-badge" id="upload-source-badge">DEFAULT</div>
+      </div>
+
+      <!-- ── GitHub Sync Section ── -->
+      <div class="github-sync-box">
+        <div class="github-sync-label">
+          <span class="github-icon">🐙</span>
+          <span>Load from GitHub</span>
+        </div>
+        <p class="github-sync-hint">
+          Paste the raw GitHub URL of your JSON file. The URL will be saved — just hit Refresh next time.
+        </p>
+        <div class="github-input-row">
+          <input
+            type="url"
+            id="github-url-input"
+            class="github-url-input"
+            placeholder="https://raw.githubusercontent.com/you/repo/main/questions.json"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="github-btn-row">
+          <button class="btn btn-github" id="btn-github-load">⬇ Load from GitHub</button>
+          <button class="btn btn-github-refresh" id="btn-github-refresh" style="display:none">🔄 Refresh</button>
+          <button class="btn btn-ghost btn-sm" id="btn-github-clear">✕ Clear URL</button>
+        </div>
+      </div>
+
+      <div class="upload-divider">
+        <span>or upload local file</span>
+      </div>
+
+      <!-- Drop zone -->
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">📥</div>
+        <div class="drop-label">Drop JSON files here</div>
+        <div class="drop-hint">or tap to browse — multiple files allowed</div>
+        <input type="file" id="file-input" accept=".json" multiple hidden />
+      </div>
+
+      <!-- Upload result (hidden until used) -->
+      <div id="upload-result" class="upload-result" style="display:none"></div>
+
+      <!-- Clear bank -->
+      <button class="btn btn-ghost btn-sm" id="btn-clear-bank" style="display:none">
+        🗑 Clear Uploaded Questions
+      </button>
+    </div>
+
+    <!-- Topic filter -->
+    <div class="home-card">
+      <div class="filter-row">
+        <label for="topic-select">Filter by Topic</label>
+        <select id="topic-select"></select>
+      </div>
+    </div>
+
+    <!-- Start quiz -->
+    <button class="btn btn-primary" id="btn-start">
+      ▶ Start Practice Quiz
+    </button>
+
+    <div class="divider"></div>
+
+    <!-- Weak mode -->
+    <div class="home-card">
+      <h2>Weak Mode <span class="weak-badge" id="weak-count-badge">none yet</span></h2>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px;line-height:1.6">
+        Questions you've answered wrong are tracked here. Practice them to improve.
+      </p>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-weak-mode" disabled>
+          📋 View Weak List
+        </button>
+        <button class="btn btn-danger" id="btn-weak-test" disabled>
+          🔴 Weak Test
+        </button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- QUIZ SCREEN                                           -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-quiz" class="screen">
+
+    <!-- Mode indicator -->
+    <div id="mode-indicator" class="mode-indicator normal">🟡 Normal Quiz</div>
+
+    <!-- Meta row -->
+    <div class="quiz-meta">
+      <span class="progress-info" id="progress-text">1 / 10</span>
+      <span class="topic-pill" id="topic-pill">Topic</span>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+
+    <!-- Question card -->
+    <div class="question-card">
+      <span class="q-number" id="q-number">Question 1</span>
+      <div id="q-weak-stat" style="margin-bottom:10px;display:none"></div>
+      <p class="q-text" id="q-text">Loading…</p>
+    </div>
+
+    <!-- Options -->
+    <div class="options-grid" id="options-container"></div>
+
+    <!-- Feedback -->
+    <div class="feedback-banner" id="feedback" style="display:none"></div>
+
+    <!-- Next -->
+    <button class="btn btn-primary" id="btn-next" style="display:none">
+      Next Question →
+    </button>
+
+    <!-- Back -->
+    <button class="btn btn-ghost" id="btn-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- RESULT SCREEN                                         -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-result" class="screen">
+
+    <div class="score-card">
+      <span class="score-label">Quiz Complete</span>
+      <div class="score-big">
+        <span id="result-score">0</span>
+        <span class="score-denom"> / <span id="result-total">0</span></span>
+      </div>
+
+      <!-- Accuracy ring -->
+      <div class="accuracy-ring">
+        <svg viewBox="0 0 100 100" width="100" height="100">
+          <circle class="ring-bg" cx="50" cy="50" r="40"
+            fill="none" stroke-width="10"/>
+          <circle class="ring-fill" id="ring-fill" cx="50" cy="50" r="40"
+            fill="none" stroke-width="10"
+            stroke-dasharray="251.2" stroke-dashoffset="251.2"/>
+        </svg>
+        <div class="accuracy-text" id="result-pct">0%</div>
+      </div>
+
+      <div class="result-stats">
+        <div class="result-stat">
+          <span class="stat-val" style="color:var(--green)" id="result-correct">0</span>
+          <span class="stat-label">Correct</span>
+        </div>
+        <div class="result-stat">
+          <span class="stat-val" style="color:var(--red)" id="result-wrong">0</span>
+          <span class="stat-label">Wrong</span>
+        </div>
+        <div class="result-stat">
+          <span class="stat-val" id="result-pct2">—</span>
+          <span class="stat-label">Accuracy</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-danger" id="btn-retry-wrong" style="display:none">
+      🔁 Retry Wrong
+    </button>
+
+    <button class="btn btn-primary" id="btn-result-home">
+      ⬅ Back to Home
+    </button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- WEAK LIST SCREEN                                      -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-weaklist" class="screen">
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="weak-list-title">🔴 Weak Questions</span>
+    </div>
+
+    <p style="font-size:0.78rem;color:var(--muted)" id="weak-count-text">0 questions need attention</p>
+
+    <div id="weak-list" style="display:flex;flex-direction:column;gap:8px"></div>
+
+    <button class="btn btn-danger" id="btn-start-weak-test">🔴 Start Weak Test</button>
+    <button class="btn btn-ghost" id="btn-weaklist-home">← Back to Home</button>
+
+  </section>
+
+</div><!-- /#app -->
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

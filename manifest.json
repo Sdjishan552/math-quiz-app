@@ -1,0 +1,17 @@
+{
+  "name": "Math Practice App",
+  "short_name": "MathQuiz",
+  "description": "Adaptive MCQ practice for math — with weak mode tracking",
+  "display": "standalone",
+  "start_url": ".",
+  "background_color": "#0f1117",
+  "theme_color": "#f5a623",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%230f1117'/><text x='50%' y='55%' font-size='100' text-anchor='middle' dominant-baseline='middle' fill='%23f5a623'>∑</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
