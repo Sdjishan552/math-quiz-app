@@ -903,3 +903,46 @@ select option { background: var(--surface2); }
   background: linear-gradient(135deg, #238636, #2ea043);
   color: #fff;
 }
+
+/* ── QR Code Panel ─────────────────────────────────────── */
+#qr-panel {
+  margin-top: 14px;
+}
+.qr-panel-inner {
+  background: linear-gradient(135deg, #1a1f2e, #12161f);
+  border: 1px solid #2a9d5c44;
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+}
+.qr-panel-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #2a9d5c;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.qr-panel-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+#qr-code-box {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+#qr-code-box canvas,
+#qr-code-box img {
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+.qr-url-preview {
+  font-size: 0.65rem;
+  color: var(--muted);
+  word-break: break-all;
+  margin-top: 6px;
+  opacity: 0.7;
+}
