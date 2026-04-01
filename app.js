@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast('📱 QR link detected — loading questions…');
   }
 
-  // If GitHub URLs are saved, always fetch fresh data from GitHub (phone auto-refresh)
+  // If GitHub URLs are saved, show QR row and fetch fresh data
   const hasGithubUrls = !!localStorage.getItem(GITHUB_KEY);
 
   if (hasGithubUrls) {
@@ -189,7 +189,6 @@ localStorage.setItem(GITHUB_KEY, JSON.stringify(urls));
       detail.join(' · ')
     );
     showToast('GitHub sync complete! ' + added + ' questions loaded.');
-    showQRCode(rawUrl);
 
   } catch (err) {
     showUploadResult('error',
@@ -401,23 +400,87 @@ function loadFromLocalStorage() {
   } catch { return false; }
 }
 
+// 4-level confirmation state for clear bank
+var clearConfirmStep = 0;
+var clearConfirmTimer = null;
+
 function clearQuestionBank() {
-  localStorage.removeItem(BANK_KEY);
-  localStorage.removeItem(META_KEY);
-  allQuestions = [];
+  clearConfirmStep++;
+  clearTimeout(clearConfirmTimer);
 
-  showUploadResult('partial', 'Uploaded bank cleared. Reloading built-in questions...');
+  // Reset after 8 seconds of inactivity
+  clearConfirmTimer = setTimeout(function() {
+    clearConfirmStep = 0;
+    updateClearBtnLabel();
+  }, 8000);
 
-  fetch('./questions.json')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      allQuestions = data;
-      onQuestionsReady('default');
-      showUploadResult('success', 'Built-in questions restored (' + data.length + ' questions).');
-    })
-    .catch(function() {
-      showUploadResult('error', 'Could not reload built-in questions.');
-    });
+  if (clearConfirmStep === 1) {
+    updateClearBtnLabel();
+    showUploadResult('partial',
+      '⚠️ Step 1 of 4 — Are you sure?',
+      'This will delete ALL ' + allQuestions.length + ' questions. Tap the button 3 more times to confirm.'
+    );
+    return;
+  }
+
+  if (clearConfirmStep === 2) {
+    updateClearBtnLabel();
+    showUploadResult('partial',
+      '⚠️ Step 2 of 4 — This cannot be undone',
+      'All questions and your question bank will be permanently deleted. Tap 2 more times.'
+    );
+    return;
+  }
+
+  if (clearConfirmStep === 3) {
+    updateClearBtnLabel();
+    showUploadResult('partial',
+      '🔴 Step 3 of 4 — Last warning!',
+      'You are about to delete ' + allQuestions.length + ' questions. Tap once more to confirm permanently.'
+    );
+    return;
+  }
+
+  if (clearConfirmStep >= 4) {
+    // All 4 confirmations passed — actually clear
+    clearConfirmStep = 0;
+    clearTimeout(clearConfirmTimer);
+    updateClearBtnLabel();
+
+    localStorage.removeItem(BANK_KEY);
+    localStorage.removeItem(META_KEY);
+    localStorage.removeItem(GITHUB_KEY);
+    allQuestions = [];
+
+    showUploadResult('partial', 'Bank cleared. Reloading built-in questions…');
+
+    fetch('./questions.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        allQuestions = data;
+        onQuestionsReady('default');
+        showUploadResult('success', '✅ Built-in questions restored (' + data.length + ' questions). GitHub URL also cleared.');
+      })
+      .catch(function() {
+        showUploadResult('error', 'Could not reload built-in questions.');
+        showScreen('home');
+      });
+  }
+}
+
+function updateClearBtnLabel() {
+  var btn = document.getElementById('btn-clear-bank');
+  if (!btn) return;
+  var labels = [
+    '🗑 Clear Bank',
+    '⚠️ Tap again (1/4)',
+    '⚠️ Tap again (2/4)',
+    '🔴 Tap again (3/4)',
+    '💀 Tap to CONFIRM DELETE (4/4)'
+  ];
+  btn.textContent = labels[Math.min(clearConfirmStep, 4)];
+  btn.style.color = clearConfirmStep >= 3 ? 'var(--red)' : '';
+  btn.style.borderColor = clearConfirmStep >= 3 ? 'var(--red)' : '';
 }
 
 // ── Upload UI helpers ──────────────────────────────────────
@@ -428,6 +491,7 @@ function updateBankUI(source) {
   const clearBtn   = document.getElementById('btn-clear-bank');
   const meta       = getStoredMeta();
   const refreshBtn = document.getElementById('btn-github-refresh');
+  const exportBtn  = document.getElementById('btn-export');
 
   // How many GitHub URLs are saved on this device?
   const savedGithubUrls = getSavedGithubUrls();
@@ -458,6 +522,12 @@ function updateBankUI(source) {
       status.textContent = allQuestions.length + ' built-in questions';
       clearBtn.style.display = 'none';
     }
+  }
+
+  // Export button: show whenever ANY questions are loaded
+  if (exportBtn) {
+    exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
+    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
   }
 
   // Refresh button: ALWAYS visible if any GitHub URL is saved on this device
@@ -544,6 +614,13 @@ function updateHomeStats() {
   document.getElementById('btn-weak-mode').disabled = weakCount === 0;
   document.getElementById('btn-weak-test').disabled = weakCount === 0;
   document.getElementById('weak-count-badge').textContent = weakCount > 0 ? weakCount + ' weak' : 'none yet';
+
+  // Always keep export button in sync with question count
+  const exportBtn = document.getElementById('btn-export');
+  if (exportBtn) {
+    exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
+    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
+  }
 }
 
 function bindEvents() {
@@ -558,6 +635,10 @@ function bindEvents() {
   document.getElementById('btn-start-weak-test').addEventListener('click', function() { startQuiz('weaktest'); });
   document.getElementById('topic-select').addEventListener('change', function(e) { selectedTopic = e.target.value; });
   document.getElementById('btn-clear-bank').addEventListener('click', clearQuestionBank);
+  document.getElementById('btn-export').addEventListener('click', exportQuestionBank);
+
+  // QR events
+  bindQREvents();
 
   // GitHub sync events
   document.getElementById('btn-github-load').addEventListener('click', loadFromGithub);
@@ -846,50 +927,258 @@ async function fetchAndMergeGithubUrl(rawUrl) {
 }
 
 // ══════════════════════════════════════════════════════════
-// QR CODE — lets phone scan once to register the URL
+// QR CODE SYSTEM
+// PC side  → Show QR button → displays QR of deep-link URL
+// Phone side → Scan QR button → opens camera, reads QR,
+//              saves URL, downloads questions automatically
 // ══════════════════════════════════════════════════════════
 
-function showQRCode(githubUrl) {
-  const panel   = document.getElementById('qr-panel');
+// ── Bind QR buttons (called from bindEvents) ───────────────
+function bindQREvents() {
+  document.getElementById('btn-show-qr').addEventListener('click', openQRDisplay);
+  document.getElementById('btn-close-qr').addEventListener('click', closeQRDisplay);
+  document.getElementById('btn-scan-qr').addEventListener('click', openQRScanner);
+  document.getElementById('btn-close-scanner').addEventListener('click', closeQRScanner);
+}
+
+// ── PC SIDE: generate and display QR ──────────────────────
+function openQRDisplay() {
+  const urls = getSavedGithubUrls();
+  if (urls.length === 0) {
+    showToast('Load a GitHub URL first.');
+    return;
+  }
+
+  // Use the most recently added URL
+  const githubUrl = urls[urls.length - 1];
+
+  const panel   = document.getElementById('qr-display-panel');
   const box     = document.getElementById('qr-code-box');
   const preview = document.getElementById('qr-url-preview');
-  if (!panel || !box) return;
 
-  // Build a deep-link URL: current page + ?ghurl=<encoded github url>
-  const appBase = window.location.origin + window.location.pathname;
+  // Deep-link: app URL + ?ghurl=<encoded github url>
+  const appBase  = window.location.origin + window.location.pathname;
   const deepLink = appBase + '?ghurl=' + encodeURIComponent(githubUrl);
 
   preview.textContent = githubUrl;
   box.innerHTML = '';
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-  // Load QR library dynamically from CDN
+  function doRender() {
+    box.innerHTML = '';
+    try {
+      new QRCode(box, {
+        text:         deepLink,
+        width:        210,
+        height:       210,
+        colorDark:    '#000000',
+        colorLight:   '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e) {
+      box.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:12px;word-break:break-all">QR render failed.<br>Share this link manually:<br><br><span style="color:#f5a623">' + deepLink + '</span></div>';
+    }
+  }
+
   if (typeof QRCode !== 'undefined') {
-    renderQR(box, deepLink);
+    doRender();
   } else {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-    script.onload = function() { renderQR(box, deepLink); };
+    box.innerHTML = '<div style="color:var(--muted);font-size:0.75rem">Loading QR library…</div>';
+    const script  = document.createElement('script');
+    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    script.onload = doRender;
     script.onerror = function() {
-      box.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:12px">QR library failed to load.<br>Share this URL manually:<br><br><span style="color:#f5a623;word-break:break-all">' + deepLink + '</span></div>';
+      box.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:12px;word-break:break-all">Could not load QR library.<br>Share link manually:<br><br><span style="color:#f5a623">' + deepLink + '</span></div>';
     };
     document.head.appendChild(script);
   }
-
-  panel.style.display = 'block';
 }
 
-function renderQR(container, text) {
-  container.innerHTML = '';
+function closeQRDisplay() {
+  const panel = document.getElementById('qr-display-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+// ── PHONE SIDE: camera scanner ─────────────────────────────
+let scannerStream   = null;
+let scannerInterval = null;
+
+async function openQRScanner() {
+  const panel  = document.getElementById('qr-scanner-panel');
+  const video  = document.getElementById('qr-video');
+  const status = document.getElementById('qr-scan-status');
+
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  status.textContent  = 'Requesting camera…';
+
+  // Load jsQR library for decoding
+  await loadJsQR();
+
   try {
-    new QRCode(container, {
-      text:         text,
-      width:        200,
-      height:       200,
-      colorDark:    '#000000',
-      colorLight:   '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
     });
-  } catch(e) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:0.75rem">Could not generate QR code.</div>';
+    video.srcObject = scannerStream;
+    await video.play();
+    status.textContent = 'Scanning — point at the QR on PC…';
+    startScanLoop(video, status);
+  } catch(err) {
+    status.textContent = '❌ Camera access denied. Allow camera permission and try again.';
+    status.style.color = 'var(--red)';
   }
+}
+
+function loadJsQR() {
+  return new Promise(function(resolve) {
+    if (typeof jsQR !== 'undefined') { resolve(); return; }
+    const script  = document.createElement('script');
+    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+    script.onload = resolve;
+    script.onerror = resolve; // proceed even if CDN fails
+    document.head.appendChild(script);
+  });
+}
+
+function startScanLoop(video, status) {
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
+
+  scannerInterval = setInterval(function() {
+    if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    if (typeof jsQR === 'undefined') {
+      status.textContent = '⚠ QR decoder not loaded. Check internet connection.';
+      return;
+    }
+
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert'
+    });
+
+    if (code && code.data) {
+      clearInterval(scannerInterval);
+      stopCameraStream();
+      status.textContent = '✅ QR detected! Downloading questions…';
+      status.style.color  = '#4ade80';
+      handleScannedQR(code.data, status);
+    }
+  }, 300);
+}
+
+async function handleScannedQR(scannedText, status) {
+  // Extract ghurl param from the deep link
+  let githubUrl = null;
+  try {
+    const parsed = new URL(scannedText);
+    githubUrl    = parsed.searchParams.get('ghurl');
+  } catch {
+    // Maybe the QR just contains the raw URL directly
+    if (scannedText.includes('githubusercontent.com') || scannedText.includes('github.com')) {
+      githubUrl = scannedText;
+    }
+  }
+
+  if (!githubUrl) {
+    status.textContent = '❌ Not a valid MathQuiz QR code. Try again.';
+    status.style.color  = 'var(--red)';
+    return;
+  }
+
+  // Save URL on this device
+  const existing = getSavedGithubUrls();
+  if (!existing.includes(githubUrl)) {
+    existing.push(githubUrl);
+    localStorage.setItem(GITHUB_KEY, JSON.stringify(existing));
+  }
+
+  // Put in input and load
+  const input = document.getElementById('github-url-input');
+  if (input) input.value = githubUrl;
+
+  // Close scanner panel
+  closeQRScanner();
+
+  // Load questions now
+  showToast('📱 QR scanned! Downloading questions…');
+  await loadFromGithub();
+}
+
+function closeQRScanner() {
+  stopCameraStream();
+  const panel = document.getElementById('qr-scanner-panel');
+  if (panel) panel.style.display = 'none';
+  const status = document.getElementById('qr-scan-status');
+  if (status) { status.textContent = 'Initialising camera…'; status.style.color = ''; }
+}
+
+function stopCameraStream() {
+  clearInterval(scannerInterval);
+  scannerInterval = null;
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(function(t) { t.stop(); });
+    scannerStream = null;
+  }
+  const video = document.getElementById('qr-video');
+  if (video) { video.srcObject = null; }
+}
+
+// ══════════════════════════════════════════════════════════
+// EXPORT QUESTION BANK
+// Exports all loaded questions as a clean JSON file that
+// can be re-imported directly via the drop zone or GitHub.
+// Structure matches exactly what validateQuestion() expects:
+// [ { id, question, options[4], correct, topic }, … ]
+// ══════════════════════════════════════════════════════════
+
+function exportQuestionBank() {
+  if (allQuestions.length === 0) {
+    showToast('No questions to export!');
+    return;
+  }
+
+  // Build clean export — only the fields the app needs
+  const exportData = allQuestions.map(function(q) {
+    return {
+      id:       q.id,
+      topic:    q.topic,
+      question: q.question,
+      options:  q.options.slice(),   // copy the array
+      correct:  q.correct
+    };
+  });
+
+  const json     = JSON.stringify(exportData, null, 2);
+  const blob     = new Blob([json], { type: 'application/json' });
+  const url      = URL.createObjectURL(blob);
+  const filename = 'mathquiz-questions-' + exportData.length + '-' + getTodayStr() + '.json';
+
+  // Trigger download
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('✅ Exported ' + exportData.length + ' questions as ' + filename);
+  showUploadResult('success',
+    '✅ Exported ' + exportData.length + ' questions',
+    'File: ' + filename + ' · Re-import by dropping this file in the upload zone below'
+  );
+}
+
+function getTodayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
 }
