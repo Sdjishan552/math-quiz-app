@@ -71,10 +71,17 @@ function onQuestionsReady(source) {
 // ══════════════════════════════════════════════════════════
 
 function restoreGithubUrl() {
-  const saved = localStorage.getItem(GITHUB_KEY);
-  if (saved) {
+  const raw = localStorage.getItem(GITHUB_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    const urls = Array.isArray(parsed) ? parsed : [parsed];
     const input = document.getElementById('github-url-input');
-    if (input) input.value = saved;
+    // Show the first saved URL in the input box
+    if (input && urls.length > 0) input.value = urls[0];
+  } catch {
+    const input = document.getElementById('github-url-input');
+    if (input) input.value = raw;
   }
 }
 
@@ -200,7 +207,8 @@ function clearGithubUrl() {
   localStorage.removeItem(GITHUB_KEY);
   const input = document.getElementById('github-url-input');
   if (input) input.value = '';
-  showToast('GitHub URL cleared.');
+  updateBankUI('default');
+  showToast('GitHub URL cleared. Paste URL again to re-link.');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -397,38 +405,64 @@ function clearQuestionBank() {
 // ── Upload UI helpers ──────────────────────────────────────
 
 function updateBankUI(source) {
-  const badge    = document.getElementById('upload-source-badge');
-  const status   = document.getElementById('bank-status');
-  const clearBtn = document.getElementById('btn-clear-bank');
-  const meta     = getStoredMeta();
+  const badge      = document.getElementById('upload-source-badge');
+  const status     = document.getElementById('bank-status');
+  const clearBtn   = document.getElementById('btn-clear-bank');
+  const meta       = getStoredMeta();
   const refreshBtn = document.getElementById('btn-github-refresh');
+
+  // How many GitHub URLs are saved on this device?
+  const savedGithubUrls = getSavedGithubUrls();
+  const hasGithub = savedGithubUrls.length > 0;
 
   if (source === 'github' && meta) {
     badge.textContent = 'GITHUB';
     badge.classList.add('uploaded');
     badge.classList.add('github');
-    status.textContent = allQuestions.length + ' questions from GitHub';
+    status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
     clearBtn.style.display = 'flex';
-    if (refreshBtn) refreshBtn.style.display = 'flex';
   } else if (source === 'uploaded' && meta) {
     badge.textContent = 'CUSTOM';
     badge.classList.add('uploaded');
     badge.classList.remove('github');
     status.textContent = allQuestions.length + ' questions from ' + meta.files + ' file' + (meta.files !== 1 ? 's' : '');
     clearBtn.style.display = 'flex';
-    if (refreshBtn) refreshBtn.style.display = 'none';
   } else {
-    badge.textContent = 'DEFAULT';
-    badge.classList.remove('uploaded');
-    badge.classList.remove('github');
-    status.textContent = allQuestions.length + ' built-in questions';
-    clearBtn.style.display = 'none';
-    if (refreshBtn) refreshBtn.style.display = 'none';
+    badge.textContent = hasGithub ? 'GITHUB' : 'DEFAULT';
+    if (hasGithub) {
+      badge.classList.add('uploaded');
+      badge.classList.add('github');
+      status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
+      clearBtn.style.display = 'flex';
+    } else {
+      badge.classList.remove('uploaded');
+      badge.classList.remove('github');
+      status.textContent = allQuestions.length + ' built-in questions';
+      clearBtn.style.display = 'none';
+    }
   }
 
-  // Show refresh if any GitHub URLs are saved
-  const savedUrls = localStorage.getItem(GITHUB_KEY);
-  if (savedUrls && refreshBtn) refreshBtn.style.display = 'flex';
+  // Refresh button: ALWAYS visible if any GitHub URL is saved on this device
+  if (refreshBtn) {
+    refreshBtn.style.display = hasGithub ? 'flex' : 'none';
+    if (hasGithub) {
+      refreshBtn.textContent = '🔄 Refresh (' + savedGithubUrls.length + ')';
+    }
+  }
+
+  // Restore saved URL into input field if present
+  restoreGithubUrl();
+}
+
+function getSavedGithubUrls() {
+  const raw = localStorage.getItem(GITHUB_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return raw ? [raw] : [];
+  }
 }
 
 function getStoredMeta() {
@@ -743,18 +777,7 @@ function showToast(msg) {
 }
 
 async function loadAllGithubSources() {
-  const raw = localStorage.getItem(GITHUB_KEY);
-  if (!raw) return;
-
-  // Support both old string format and new array format
-  let urls;
-  try {
-    const parsed = JSON.parse(raw);
-    urls = Array.isArray(parsed) ? parsed : [parsed];
-  } catch {
-    urls = [raw];
-  }
-
+  const urls = getSavedGithubUrls();
   if (urls.length === 0) return;
 
   showUploadResult('partial', '⏳ Auto-refreshing ' + urls.length + ' GitHub source' + (urls.length > 1 ? 's' : '') + '...');
