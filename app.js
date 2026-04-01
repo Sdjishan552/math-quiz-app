@@ -26,21 +26,31 @@ let currentQ      = null;
 document.addEventListener('DOMContentLoaded', async () => {
   loadWeakStats();
   bindEvents();
-  restoreGithubUrl();
 
-  const loaded = loadFromLocalStorage();
-  if (loaded) {
-    onQuestionsReady('uploaded');
+  // If GitHub URLs are saved, always fetch fresh data from GitHub (phone auto-refresh)
+  const hasGithubUrls = !!localStorage.getItem(GITHUB_KEY);
+
+  if (hasGithubUrls) {
+    // Start with localStorage as a fast first render
+    loadFromLocalStorage();
+    onQuestionsReady('github');
+    // Then fetch fresh from GitHub in the background
+    await loadAllGithubSources();
   } else {
-    try {
-      const r = await fetch('./questions.json');
-      if (!r.ok) throw new Error('fetch failed');
-      const data = await r.json();
-      allQuestions = data;
-      onQuestionsReady('default');
-    } catch {
-      showUploadResult('error', 'Could not load built-in questions. Upload a JSON file or load from GitHub to begin.');
-      showScreen('home');
+    const loaded = loadFromLocalStorage();
+    if (loaded) {
+      onQuestionsReady('uploaded');
+    } else {
+      try {
+        const r = await fetch('./questions.json');
+        if (!r.ok) throw new Error('fetch failed');
+        const data = await r.json();
+        allQuestions = data;
+        onQuestionsReady('default');
+      } catch {
+        showUploadResult('error', 'Could not load built-in questions. Upload a JSON file or load from GitHub to begin.');
+        showScreen('home');
+      }
     }
   }
 
@@ -132,7 +142,13 @@ async function loadFromGithub() {
     allQuestions  = merged;
 
     // Save URL for next time
-    localStorage.setItem(GITHUB_KEY, rawUrl);
+    let urls = JSON.parse(localStorage.getItem(GITHUB_KEY) || "[]");
+
+if (!urls.includes(rawUrl)) {
+  urls.push(rawUrl);
+}
+
+localStorage.setItem(GITHUB_KEY, JSON.stringify(urls));
 
     saveToLocalStorage(merged, { files: 1, total: merged.length, source: 'github' });
     populateTopics();
@@ -162,8 +178,8 @@ async function loadFromGithub() {
 }
 
 async function refreshFromGithub() {
-  const savedUrl = localStorage.getItem(GITHUB_KEY);
-  if (!savedUrl) {
+  const raw = localStorage.getItem(GITHUB_KEY);
+  if (!raw) {
     showToast('No GitHub URL saved yet.');
     return;
   }
@@ -171,16 +187,11 @@ async function refreshFromGithub() {
   const btn = document.getElementById('btn-github-refresh');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Refreshing…'; }
 
-  // Temporarily put URL back in input
-  const input = document.getElementById('github-url-input');
-  if (input) input.value = savedUrl;
-
-  // Clear current bank so we get a fresh load
+  // Clear current bank so we get fresh data (keeps weak stats)
   localStorage.removeItem(BANK_KEY);
-  localStorage.removeItem(META_KEY);
   allQuestions = [];
 
-  await loadFromGithub();
+  await loadAllGithubSources();
 
   if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh'; }
 }
@@ -313,15 +324,26 @@ function validateQuestion(item, idx) {
 
 function mergeQuestions(existing, incoming) {
   const seenIds  = new Set(existing.map(function(q) { return String(q.id); }));
+  // Only deduplicate by question text — same question from two files = real duplicate
   const seenText = new Set(existing.map(function(q) { return q.question.toLowerCase().trim(); }));
 
-  const toAdd = incoming.filter(function(q) {
-    const sid  = String(q.id);
+  const toAdd = [];
+  incoming.forEach(function(q) {
     const text = q.question.toLowerCase().trim();
-    if (seenIds.has(sid) || seenText.has(text)) return false;
+    // Skip true duplicates (same question text)
+    if (seenText.has(text)) return;
+
+    // If the ID clashes with an existing one (different question, same id from another file),
+    // generate a new unique ID so both questions are kept
+    let sid = String(q.id);
+    if (seenIds.has(sid)) {
+      sid = stableHash(text + '_' + Date.now() + '_' + Math.random());
+      q = Object.assign({}, q, { id: sid });
+    }
+
     seenIds.add(sid);
     seenText.add(text);
-    return true;
+    toAdd.push(q);
   });
 
   return existing.concat(toAdd);
@@ -404,9 +426,9 @@ function updateBankUI(source) {
     if (refreshBtn) refreshBtn.style.display = 'none';
   }
 
-  // Show refresh if github URL is saved regardless
-  const savedUrl = localStorage.getItem(GITHUB_KEY);
-  if (savedUrl && refreshBtn) refreshBtn.style.display = 'flex';
+  // Show refresh if any GitHub URLs are saved
+  const savedUrls = localStorage.getItem(GITHUB_KEY);
+  if (savedUrls && refreshBtn) refreshBtn.style.display = 'flex';
 }
 
 function getStoredMeta() {
@@ -718,4 +740,66 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(function() { t.classList.remove('show'); }, 2800);
+}
+
+async function loadAllGithubSources() {
+  const raw = localStorage.getItem(GITHUB_KEY);
+  if (!raw) return;
+
+  // Support both old string format and new array format
+  let urls;
+  try {
+    const parsed = JSON.parse(raw);
+    urls = Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    urls = [raw];
+  }
+
+  if (urls.length === 0) return;
+
+  showUploadResult('partial', '⏳ Auto-refreshing ' + urls.length + ' GitHub source' + (urls.length > 1 ? 's' : '') + '...');
+
+  let totalAdded = 0;
+  for (const url of urls) {
+    const added = await fetchAndMergeGithubUrl(url);
+    totalAdded += added;
+  }
+
+  saveToLocalStorage(allQuestions, { files: urls.length, total: allQuestions.length, source: 'github' });
+  populateTopics();
+  updateHomeStats();
+  updateBankUI('github');
+
+  if (totalAdded > 0) {
+    showUploadResult('success',
+      '✅ Auto-synced from GitHub — ' + allQuestions.length + ' questions total',
+      totalAdded + ' new questions added this refresh'
+    );
+  }
+}
+
+// Fetches one URL, merges into allQuestions, returns count of newly added questions
+async function fetchAndMergeGithubUrl(rawUrl) {
+  try {
+    const url = convertToRawUrl(rawUrl);
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+
+    const raw = await response.json();
+    if (!Array.isArray(raw)) throw new Error('Not an array');
+
+    const newQuestions = [];
+    raw.forEach(function(item, idx) {
+      const q = validateQuestion(item, idx);
+      if (q) newQuestions.push(q);
+    });
+
+    const prevLen = allQuestions.length;
+    allQuestions = mergeQuestions(allQuestions, newQuestions);
+    return allQuestions.length - prevLen;
+
+  } catch (err) {
+    console.error('GitHub load failed for', rawUrl, ':', err);
+    return 0;
+  }
 }
