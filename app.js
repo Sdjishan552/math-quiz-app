@@ -27,6 +27,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadWeakStats();
   bindEvents();
 
+  // Check if app was opened via QR deep link (?ghurl=...) — auto-save and load
+  const params   = new URLSearchParams(window.location.search);
+  const deepUrl  = params.get('ghurl');
+  if (deepUrl) {
+    // Save this URL on this device, then strip the param from the address bar
+    const existing = getSavedGithubUrls();
+    if (!existing.includes(deepUrl)) {
+      existing.push(deepUrl);
+      localStorage.setItem(GITHUB_KEY, JSON.stringify(existing));
+    }
+    // Put it in the input so loadFromGithub() picks it up
+    const inp = document.getElementById('github-url-input');
+    if (inp) inp.value = deepUrl;
+    history.replaceState({}, '', window.location.pathname);
+    showToast('📱 QR link detected — loading questions…');
+  }
+
   // If GitHub URLs are saved, always fetch fresh data from GitHub (phone auto-refresh)
   const hasGithubUrls = !!localStorage.getItem(GITHUB_KEY);
 
@@ -172,6 +189,7 @@ localStorage.setItem(GITHUB_KEY, JSON.stringify(urls));
       detail.join(' · ')
     );
     showToast('GitHub sync complete! ' + added + ' questions loaded.');
+    showQRCode(rawUrl);
 
   } catch (err) {
     showUploadResult('error',
@@ -824,5 +842,54 @@ async function fetchAndMergeGithubUrl(rawUrl) {
   } catch (err) {
     console.error('GitHub load failed for', rawUrl, ':', err);
     return 0;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// QR CODE — lets phone scan once to register the URL
+// ══════════════════════════════════════════════════════════
+
+function showQRCode(githubUrl) {
+  const panel   = document.getElementById('qr-panel');
+  const box     = document.getElementById('qr-code-box');
+  const preview = document.getElementById('qr-url-preview');
+  if (!panel || !box) return;
+
+  // Build a deep-link URL: current page + ?ghurl=<encoded github url>
+  const appBase = window.location.origin + window.location.pathname;
+  const deepLink = appBase + '?ghurl=' + encodeURIComponent(githubUrl);
+
+  preview.textContent = githubUrl;
+  box.innerHTML = '';
+
+  // Load QR library dynamically from CDN
+  if (typeof QRCode !== 'undefined') {
+    renderQR(box, deepLink);
+  } else {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    script.onload = function() { renderQR(box, deepLink); };
+    script.onerror = function() {
+      box.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:12px">QR library failed to load.<br>Share this URL manually:<br><br><span style="color:#f5a623;word-break:break-all">' + deepLink + '</span></div>';
+    };
+    document.head.appendChild(script);
+  }
+
+  panel.style.display = 'block';
+}
+
+function renderQR(container, text) {
+  container.innerHTML = '';
+  try {
+    new QRCode(container, {
+      text:         text,
+      width:        200,
+      height:       200,
+      colorDark:    '#000000',
+      colorLight:   '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:0.75rem">Could not generate QR code.</div>';
   }
 }
