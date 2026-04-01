@@ -66,8 +66,9 @@ body::before {
 
 /* ── Header ── */
 header {
-  padding: 28px 0 20px;
+  padding: 20px 16px 16px;
   text-align: center;
+  position: relative;
 }
 
 .logo {
@@ -95,6 +96,22 @@ header {
   text-transform: uppercase;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.header-qr-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.header-qr-row .btn-qr-show,
+.header-qr-row .btn-qr-scan {
+  font-size: 0.75rem;
+  padding: 7px 14px;
+  min-width: unset;
+  flex: unset;
 }
 
 /* ── Screen utility ── */
@@ -945,4 +962,146 @@ select option { background: var(--surface2); }
   word-break: break-all;
   margin-top: 6px;
   opacity: 0.7;
+}
+
+/* ── QR Action Row ─────────────────────────────────────── */
+.qr-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.btn-qr-show {
+  background: linear-gradient(135deg, #1a3a2a, #1e4a32);
+  color: #4ade80;
+  border: 1px solid #2a9d5c66;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: 1;
+  min-width: 130px;
+  transition: all 0.18s;
+}
+.btn-qr-show:hover { background: linear-gradient(135deg, #1e4a32, #256040); }
+.btn-qr-scan {
+  background: linear-gradient(135deg, #1a2a3a, #1e3248);
+  color: #60a5fa;
+  border: 1px solid #3b82f666;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: 1;
+  min-width: 130px;
+  transition: all 0.18s;
+}
+.btn-qr-scan:hover { background: linear-gradient(135deg, #1e3248, #1e3a5f); }
+
+/* ── QR Panels ─────────────────────────────────────────── */
+#qr-display-panel,
+#qr-scanner-panel {
+  margin-top: 14px;
+}
+.qr-panel-inner {
+  background: linear-gradient(135deg, #1a1f2e, #12161f);
+  border: 1px solid #2a9d5c44;
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+}
+.qr-panel-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #4ade80;
+  margin-bottom: 6px;
+}
+.qr-panel-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+#qr-code-box {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+#qr-code-box canvas,
+#qr-code-box img {
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+.qr-url-preview {
+  font-size: 0.65rem;
+  color: var(--muted);
+  word-break: break-all;
+  margin-top: 6px;
+  opacity: 0.7;
+}
+
+/* ── QR Scanner ────────────────────────────────────────── */
+.qr-video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 1;
+}
+#qr-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.qr-scan-line {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #4ade80, transparent);
+  animation: scanline 2s linear infinite;
+  top: 20%;
+}
+@keyframes scanline {
+  0%   { top: 15%; opacity: 1; }
+  90%  { top: 80%; opacity: 1; }
+  100% { top: 15%; opacity: 0; }
+}
+.qr-scan-status {
+  font-size: 0.78rem;
+  color: #60a5fa;
+  margin-top: 8px;
+  min-height: 1.4em;
+}
+
+/* ── Bank Action Row (Export + Clear) ──────────────────── */
+.bank-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.btn-export {
+  background: linear-gradient(135deg, #1a2a3a, #1e3248);
+  color: #60a5fa;
+  border: 1px solid #3b82f666;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: 1;
+  min-width: 160px;
+  transition: all 0.18s;
+}
+.btn-export:hover {
+  background: linear-gradient(135deg, #1e3248, #1e3a5f);
+  border-color: #3b82f699;
 }
