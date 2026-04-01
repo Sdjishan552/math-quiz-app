@@ -1009,22 +1009,36 @@ async function openQRScanner() {
   const video  = document.getElementById('qr-video');
   const status = document.getElementById('qr-scan-status');
 
+  logDebug("📷 Opening QR Scanner...");
+
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
   status.textContent  = 'Requesting camera…';
 
-  // Load jsQR library for decoding
+  logDebug("⏳ Loading QR decoder library...");
   await loadJsQR();
+  logDebug("✅ QR decoder loaded");
 
   try {
+    logDebug("🎥 Requesting camera access...");
+
     scannerStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' }
     });
+
+    logDebug("✅ Camera access granted");
+
     video.srcObject = scannerStream;
     await video.play();
+
     status.textContent = 'Scanning — point at the QR on PC…';
+    logDebug("🔍 Scan started");
+
     startScanLoop(video, status);
+
   } catch(err) {
+    logDebug("❌ Camera error: " + err.message);
+
     status.textContent = '❌ Camera access denied. Allow camera permission and try again.';
     status.style.color = 'var(--red)';
   }
@@ -1036,8 +1050,10 @@ function loadJsQR() {
     const script  = document.createElement('script');
     script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
     script.onload = resolve;
-    script.onerror = resolve; // proceed even if CDN fails
-    document.head.appendChild(script);
+script.onerror = function() {
+  logDebug("❌ Failed to load jsQR library");
+  resolve();
+};    document.head.appendChild(script);
   });
 }
 
@@ -1054,7 +1070,9 @@ function startScanLoop(video, status) {
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+    // ✅ SINGLE correct check
     if (typeof jsQR === 'undefined') {
+      logDebug("❌ jsQR library not loaded");
       status.textContent = '⚠ QR decoder not loaded. Check internet connection.';
       return;
     }
@@ -1064,12 +1082,18 @@ function startScanLoop(video, status) {
     });
 
     if (code && code.data) {
+
+      logDebug("📷 QR scanned: " + code.data);
+
       clearInterval(scannerInterval);
       stopCameraStream();
+
       status.textContent = '✅ QR detected! Downloading questions…';
       status.style.color  = '#4ade80';
+
       handleScannedQR(code.data, status);
     }
+
   }, 300);
 }
 
@@ -1182,3 +1206,25 @@ function getTodayStr() {
     String(d.getMonth() + 1).padStart(2, '0') + '-' +
     String(d.getDate()).padStart(2, '0');
 }
+function logDebug(msg) {
+  const log = document.getElementById("debug-log");
+  if (!log) return;
+
+  const line = document.createElement("div");
+  line.textContent = msg;
+  log.appendChild(line);
+
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearDebug() {
+  document.getElementById("debug-log").innerHTML = "";
+}
+
+window.onerror = function(message, source, lineno, colno, error) {
+  logDebug("❌ ERROR: " + message + " @ " + lineno);
+};
+
+window.onunhandledrejection = function(e) {
+  logDebug("❌ PROMISE ERROR: " + e.reason);
+};
