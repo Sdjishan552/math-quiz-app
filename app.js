@@ -333,7 +333,7 @@ function validateQuestion(item, idx) {
   const question = String(item.question || '').trim();
   if (!question) return null;
 
-  if (!Array.isArray(item.options) || item.options.length !== 4) return null;
+  if (!Array.isArray(item.options) || (item.options.length !== 4 && item.options.length !== 5)) return null;
 
   const options = item.options.map(function(o) { return String(o || '').trim(); });
   if (options.some(function(o) { return o === ''; })) return null;
@@ -722,7 +722,7 @@ function loadQuestion() {
     qStat.style.display = 'none';
   }
 
-  var letters   = ['A', 'B', 'C', 'D'];
+  var letters = ['A', 'B', 'C', 'D', 'E'];
   var container = document.getElementById('options-container');
   container.innerHTML = '';
   currentQ.options.forEach(function(opt, i) {
