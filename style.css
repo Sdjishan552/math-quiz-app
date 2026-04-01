@@ -98,21 +98,7 @@ header {
   margin-top: 2px;
 }
 
-.header-qr-row {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-.header-qr-row .btn-qr-show,
-.header-qr-row .btn-qr-scan {
-  font-size: 0.75rem;
-  padding: 7px 14px;
-  min-width: unset;
-  flex: unset;
-}
+/* QR row removed */
 
 /* ── Screen utility ── */
 .screen { display: none; flex-direction: column; gap: 16px; flex: 1; }
@@ -1104,4 +1090,231 @@ select option { background: var(--surface2); }
 .btn-export:hover {
   background: linear-gradient(135deg, #1e3248, #1e3a5f);
   border-color: #3b82f699;
+}
+
+/* ══════════════════════════════════════════════════════════
+   NEW STYLES: Overall Quiz, Timer, Session History
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Overall Quiz button ── */
+.btn-overall {
+  background: linear-gradient(135deg, #1a2a3a, #1e3660);
+  color: #93c5fd;
+  border: 1px solid rgba(147,197,253,0.3);
+  border-radius: var(--radius-sm);
+  padding: 15px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: var(--trans);
+  font-family: 'DM Sans', sans-serif;
+}
+.btn-overall:hover { background: linear-gradient(135deg, #1e3248, #1e3a6e); border-color: rgba(147,197,253,0.5); transform: translateY(-1px); }
+.btn-overall:active { transform: translateY(0); }
+
+/* ── Overall mode indicator ── */
+.mode-indicator.overall {
+  background: rgba(147,197,253,0.08);
+  border-color: rgba(147,197,253,0.25);
+  color: #93c5fd;
+}
+
+/* ── Setup screen ── */
+.setup-field { display: flex; flex-direction: column; gap: 8px; }
+
+.setup-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.setup-num-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setup-num-row .btn { width: auto; padding: 10px 18px; flex: 0 0 auto; }
+
+.num-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 1.4rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+  -moz-appearance: textfield;
+}
+.num-input::-webkit-inner-spin-button,
+.num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.num-input:focus { border-color: var(--amber); }
+
+.setup-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Timer option cards ── */
+.timer-option-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.timer-option input[type="radio"] { display: none; }
+
+.timer-opt-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 10px;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--trans);
+  text-align: center;
+}
+
+.timer-option input[type="radio"]:checked + .timer-opt-box {
+  border-color: var(--amber);
+  background: rgba(245,166,35,0.08);
+}
+
+.timer-opt-box:hover { border-color: var(--amber); }
+
+.timer-opt-icon { font-size: 1.5rem; line-height: 1; }
+.timer-opt-title { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.timer-opt-sub { font-size: 0.68rem; color: var(--muted); }
+
+/* ── Timer display in quiz ── */
+.timer-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(245,166,35,0.08);
+  border: 1px solid rgba(245,166,35,0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 2px;
+}
+
+.timer-icon { font-size: 0.9rem; }
+
+/* ── Result time row ── */
+.result-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+  font-size: 0.85rem;
+}
+.result-time-label { color: var(--muted); }
+.result-time-val { font-family: 'DM Mono', monospace; color: var(--amber); font-weight: 600; }
+
+/* ── Session History ── */
+.history-tab-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.history-tab {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: var(--trans);
+  letter-spacing: 0.5px;
+}
+
+.history-tab:hover { color: var(--text); border-color: var(--amber); }
+.history-tab.active { background: rgba(245,166,35,0.12); border-color: rgba(245,166,35,0.4); color: var(--amber); }
+
+.history-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: slideUp 0.18s ease;
+}
+
+.hist-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hist-mode {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hist-topic {
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+.hist-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hist-score { display: flex; flex-direction: column; gap: 2px; }
+.hist-big { font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.hist-sub { font-size: 0.72rem; color: var(--muted); }
+
+.hist-date {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-align: right;
+  line-height: 1.5;
 }
