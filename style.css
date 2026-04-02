@@ -143,7 +143,7 @@ header {
   padding: 22px;
   box-shadow: var(--shadow);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .home-card::before {
@@ -153,6 +153,7 @@ header {
   height: 2px;
   background: var(--grad-main);
   opacity: 0.7;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 
 .home-card h2 {
