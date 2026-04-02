@@ -22,7 +22,7 @@ let attempted      = 0;
 let sessionWrong   = [];
 let weakStats      = {};
 let currentMode    = 'normal';   // normal | overall | weaktest | retry
-let selectedTopic  = 'All';
+let selectedTopics = [];         // array of selected topic strings (multi-select)
 let currentQ       = null;
 
 // Timer state
@@ -484,12 +484,61 @@ function loadWeakStats() {
 function saveWeakStats() { localStorage.setItem(WEAK_KEY, JSON.stringify(weakStats)); }
 
 function populateTopics() {
-  const topics = ['All'].concat(Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort());
-  const sel  = document.getElementById('topic-select');
-  const prev = sel.value;
-  sel.innerHTML = topics.map(function(t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
-  if (topics.includes(prev)) sel.value = prev;
-  else { sel.value = 'All'; selectedTopic = 'All'; }
+  const topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+  const list   = document.getElementById('multi-select-list');
+  if (!list) return;
+
+  // Keep previously selected topics that still exist
+  selectedTopics = selectedTopics.filter(function(t) { return topics.includes(t); });
+
+  list.innerHTML = topics.map(function(t) {
+    const checked = selectedTopics.includes(t) ? 'checked' : '';
+    const count   = allQuestions.filter(function(q) { return q.topic === t; }).length;
+    return '<label class="multi-select-item">' +
+      '<input type="checkbox" class="topic-checkbox" value="' + escHtml(t) + '" ' + checked + '/>' +
+      '<span class="topic-item-name">' + escHtml(t) + '</span>' +
+      '<span class="topic-item-count">' + count + '</span>' +
+      '</label>';
+  }).join('');
+
+  // Bind checkbox events
+  list.querySelectorAll('.topic-checkbox').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      if (this.checked) {
+        if (!selectedTopics.includes(this.value)) selectedTopics.push(this.value);
+      } else {
+        selectedTopics = selectedTopics.filter(function(t) { return t !== cb.value; });
+      }
+      updateMultiSelectLabel();
+      updateTopicQCount();
+    });
+  });
+
+  updateMultiSelectLabel();
+  updateTopicQCount();
+}
+
+function updateMultiSelectLabel() {
+  const label = document.getElementById('multi-select-label');
+  if (!label) return;
+  if (selectedTopics.length === 0) {
+    label.textContent = 'Select topics…';
+  } else if (selectedTopics.length === 1) {
+    label.textContent = selectedTopics[0];
+  } else {
+    label.textContent = selectedTopics.length + ' topics selected';
+  }
+}
+
+function updateTopicQCount() {
+  const hint = document.getElementById('topic-q-count');
+  if (!hint) return;
+  if (selectedTopics.length === 0) {
+    hint.textContent = 'Select at least one topic to start';
+    return;
+  }
+  const count = allQuestions.filter(function(q) { return selectedTopics.includes(q.topic); }).length;
+  hint.textContent = count + ' question' + (count !== 1 ? 's' : '') + ' in selection';
 }
 
 function updateHomeStats() {
@@ -574,7 +623,7 @@ function buildSessionEntry() {
     id:        Date.now(),
     date:      new Date().toISOString(),
     mode:      currentMode,          // normal | overall | weaktest | retry
-    topic:     currentMode === 'normal' ? selectedTopic : (currentMode === 'overall' ? 'All Topics' : 'Weak'),
+    topic:     currentMode === 'normal' ? (selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics') : (currentMode === 'overall' ? 'All Topics' : 'Weak'),
     total:     attempted,
     correct:   score,
     wrong:     attempted - score,
@@ -699,8 +748,38 @@ function bindEvents() {
     });
   });
 
-  // Topic select
-  document.getElementById('topic-select').addEventListener('change', function(e) { selectedTopic = e.target.value; });
+  // Multi-select topic dropdown
+  var multiToggle   = document.getElementById('multi-select-toggle');
+  var multiDropdown = document.getElementById('multi-select-dropdown');
+
+  multiToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var isOpen = multiDropdown.classList.toggle('open');
+    multiToggle.classList.toggle('open', isOpen);
+  });
+
+  document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('multi-select-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      multiDropdown.classList.remove('open');
+      multiToggle.classList.remove('open');
+    }
+  });
+
+  document.getElementById('btn-select-all-topics').addEventListener('click', function() {
+    var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+    selectedTopics = topics.slice();
+    document.querySelectorAll('.topic-checkbox').forEach(function(cb) { cb.checked = true; });
+    updateMultiSelectLabel();
+    updateTopicQCount();
+  });
+
+  document.getElementById('btn-clear-topics').addEventListener('click', function() {
+    selectedTopics = [];
+    document.querySelectorAll('.topic-checkbox').forEach(function(cb) { cb.checked = false; });
+    updateMultiSelectLabel();
+    updateTopicQCount();
+  });
 
   // Bank
   document.getElementById('btn-clear-bank').addEventListener('click', clearQuestionBank);
@@ -746,10 +825,9 @@ function startQuiz(mode) {
   if (mode !== 'overall') timerMode = 'none';
 
   if (mode === 'normal') {
-    var pool = selectedTopic === 'All'
-      ? allQuestions.slice()
-      : allQuestions.filter(function(q) { return q.topic === selectedTopic; });
-    if (pool.length === 0) { showToast('No questions for this topic!'); return; }
+    if (selectedTopics.length === 0) { showToast('Select at least one topic first!'); return; }
+    var pool = allQuestions.filter(function(q) { return selectedTopics.includes(q.topic); });
+    if (pool.length === 0) { showToast('No questions for selected topics!'); return; }
     sessionQueue = shuffle(pool);
 
   } else if (mode === 'overall') {
@@ -963,7 +1041,8 @@ function updateModeIndicator() {
   } else if (currentMode === 'overall') {
     el.textContent = '🌐 Overall Quiz'; el.className = 'mode-indicator overall';
   } else {
-    el.textContent = '🟡 ' + (selectedTopic === 'All' ? 'All Topics' : selectedTopic); el.className = 'mode-indicator normal';
+    var topicLabel = selectedTopics.length === 0 ? 'No Topic' : selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics';
+    el.textContent = '🟡 ' + topicLabel; el.className = 'mode-indicator normal';
   }
   // Show/hide timer display bar based on mode
   document.getElementById('timer-display').style.display = (timerMode === 'countup') ? 'flex' : 'none';
