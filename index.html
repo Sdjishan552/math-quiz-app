@@ -111,11 +111,24 @@
       </div>
     </div>
 
-    <!-- Topic filter -->
+    <!-- Topic filter (multi-select) -->
     <div class="home-card">
       <div class="filter-row">
-        <label for="topic-select">Filter by Topic</label>
-        <select id="topic-select"></select>
+        <label>Filter by Topic</label>
+        <div class="multi-select-wrap" id="multi-select-wrap">
+          <button class="multi-select-toggle" id="multi-select-toggle" type="button">
+            <span id="multi-select-label">Select topics…</span>
+            <span class="multi-select-arrow">▾</span>
+          </button>
+          <div class="multi-select-dropdown" id="multi-select-dropdown">
+            <div class="multi-select-actions">
+              <button class="multi-select-action-btn" id="btn-select-all-topics">Select All</button>
+              <button class="multi-select-action-btn" id="btn-clear-topics">Clear</button>
+            </div>
+            <div class="multi-select-list" id="multi-select-list"></div>
+          </div>
+        </div>
+        <p class="multi-select-hint" id="topic-q-count">— questions in selection</p>
       </div>
     </div>
 
