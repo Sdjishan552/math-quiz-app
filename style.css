@@ -1,4 +1,4 @@
- /* ============================================================
+/* ============================================================
    MATH QUIZ PWA — Neon Gradient Theme
    Totally new design: vibrant, colorful, energetic
    Font: Nunito (rounded, friendly) + JetBrains Mono
@@ -1263,3 +1263,120 @@ header {
 }
 
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ══════════════════════════════════════════════════════════
+   SUBJECT TABS
+   ══════════════════════════════════════════════════════════ */
+
+.subject-tab-bar {
+  display: flex;
+  gap: 8px;
+  padding: 0 0 6px;
+  margin-bottom: 4px;
+}
+
+.subject-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 10px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--trans);
+  letter-spacing: 0.2px;
+}
+
+.subject-tab:hover {
+  border-color: var(--violet);
+  color: var(--text);
+}
+
+/* Maths tab active */
+.subject-tab[data-subject="maths"].active {
+  background: var(--violet-bg);
+  border-color: var(--violet);
+  color: var(--violet);
+  box-shadow: 0 0 16px rgba(162,89,255,0.2);
+}
+
+/* Reasoning tab active */
+.subject-tab[data-subject="reasoning"].active {
+  background: var(--cyan-bg);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 16px rgba(0,212,255,0.2);
+}
+
+.subject-tab-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* ── Quiz screen subject pill ── */
+.quiz-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quiz-subject-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.subject-pill-maths {
+  background: var(--violet-bg);
+  border: 1px solid rgba(162,89,255,0.35);
+  color: var(--violet);
+}
+
+.subject-pill-reasoning {
+  background: var(--cyan-bg);
+  border: 1px solid rgba(0,212,255,0.35);
+  color: var(--cyan);
+}
+
+/* mode indicator takes remaining space in the row */
+.quiz-top-row .mode-indicator {
+  flex: 1;
+}
+
+/* ── History subject badge ── */
+.hist-subject-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  border-radius: 20px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hist-subj-maths {
+  background: var(--violet-bg);
+  border: 1px solid rgba(162,89,255,0.3);
+  color: var(--violet);
+}
+
+.hist-subj-reasoning {
+  background: var(--cyan-bg);
+  border: 1px solid rgba(0,212,255,0.3);
+  color: var(--cyan);
+}
