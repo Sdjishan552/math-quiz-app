@@ -1,6 +1,6 @@
 {
-  "name": "Math Practice App",
-  "short_name": "MathQuiz",
+  "name": "Banking Practice App",
+  "short_name": "BankingQuiz",
   "description": "Adaptive MCQ practice for math — with weak mode tracking",
   "display": "standalone",
   "start_url": "./",
