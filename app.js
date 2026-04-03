@@ -1,17 +1,43 @@
 /* ============================================================
-   MATH QUIZ PWA — app.js  v2.0
-   + Overall Quiz (custom count, mixed topics)
-   + Count-up Timer (optional)
-   + Session History (topic + overall + weak)
-   + Weak Mode unified across all quiz types
+   QUIZ PWA — app.js  v3.0
+   + Two fully isolated subjects: Maths & Reasoning
+   + Subject tab switcher on home screen
+   + All state (bank, weak, github, history) namespaced per subject
+   + Everything else works exactly as before
    ============================================================ */
 
-// ── Storage keys ───────────────────────────────────────────
-const WEAK_KEY     = 'mathquiz_weak_stats';
-const BANK_KEY     = 'mathquiz_question_bank';
-const META_KEY     = 'mathquiz_bank_meta';
-const GITHUB_KEY   = 'mathquiz_github_url';
-const HISTORY_KEY  = 'mathquiz_session_history';
+// ── Subject config ─────────────────────────────────────────
+const SUBJECTS = {
+  maths: {
+    key:         'maths',
+    label:       'MathQuiz',
+    icon:        '∑',
+    fallbackJson: './questions.json',
+    grad:        'var(--grad-main)',          // violet→pink  (existing primary)
+    accentVar:   '--violet',
+    pillClass:   'subject-pill-maths',
+  },
+  reasoning: {
+    key:         'reasoning',
+    label:       'ReasoningQuiz',
+    icon:        '🧩',
+    fallbackJson: null,                       // no built-in fallback
+    grad:        'var(--grad-cyan)',          // cyan→violet
+    accentVar:   '--cyan',
+    pillClass:   'subject-pill-reasoning',
+  }
+};
+
+// ── Active subject ─────────────────────────────────────────
+let activeSubject = 'maths';   // 'maths' | 'reasoning'
+
+// ── Per-subject storage key helpers ───────────────────────
+function sKey(base) { return 'quiz_' + activeSubject + '_' + base; }
+const WEAK_KEY    = () => sKey('weak_stats');
+const BANK_KEY    = () => sKey('question_bank');
+const META_KEY    = () => sKey('bank_meta');
+const GITHUB_KEY  = () => sKey('github_url');
+const HISTORY_KEY = () => sKey('session_history');
 
 // ── State ──────────────────────────────────────────────────
 let allQuestions   = [];
@@ -22,7 +48,7 @@ let attempted      = 0;
 let sessionWrong   = [];
 let weakStats      = {};
 let currentMode    = 'normal';   // normal | overall | weaktest | retry
-let selectedTopics = [];         // array of selected topic strings (multi-select)
+let selectedTopics = [];
 let currentQ       = null;
 
 // Timer state
@@ -35,40 +61,96 @@ let overallQCount  = 20;
 
 // ── Boot ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  loadWeakStats();
+  bindSubjectTabs();
   bindEvents();
+  await switchSubject('maths', true);
 
-  // Restore saved GitHub URL into input
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js');
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// SUBJECT SWITCHING
+// ══════════════════════════════════════════════════════════
+
+function bindSubjectTabs() {
+  document.querySelectorAll('.subject-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var subj = tab.dataset.subject;
+      if (subj === activeSubject) return;
+      switchSubject(subj, false);
+    });
+  });
+}
+
+async function switchSubject(subj, isInit) {
+  activeSubject = subj;
+  var cfg = SUBJECTS[subj];
+
+  // Update tab UI
+  document.querySelectorAll('.subject-tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.subject === subj);
+    t.classList.toggle('tab-maths',     t.dataset.subject === 'maths');
+    t.classList.toggle('tab-reasoning', t.dataset.subject === 'reasoning');
+  });
+
+  // Update header logo
+  document.getElementById('logo-icon').textContent = cfg.icon;
+  document.getElementById('logo-text').textContent  = cfg.label;
+
+  // Update quiz subject pill
+  var pill = document.getElementById('quiz-subject-pill');
+  pill.textContent = cfg.icon + ' ' + cfg.label.replace('Quiz','');
+  pill.className = 'quiz-subject-pill ' + cfg.pillClass;
+
+  // Reset per-subject runtime state
+  allQuestions   = [];
+  selectedTopics = [];
+  weakStats      = {};
+  sessionQueue   = [];
+  sessionIndex   = 0;
+  score          = 0;
+  attempted      = 0;
+  sessionWrong   = [];
+
+  // Hide upload result carry-over
+  var ur = document.getElementById('upload-result');
+  if (ur) { ur.style.display = 'none'; ur.textContent = ''; }
+
+  // Load this subject's data
+  loadWeakStats();
   restoreGithubUrl();
 
-  const hasGithubUrls = !!localStorage.getItem(GITHUB_KEY);
+  var hasGithubUrls = !!localStorage.getItem(GITHUB_KEY());
 
   if (hasGithubUrls) {
     loadFromLocalStorage();
     onQuestionsReady('github');
     await loadAllGithubSources();
   } else {
-    const loaded = loadFromLocalStorage();
+    var loaded = loadFromLocalStorage();
     if (loaded) {
       onQuestionsReady('uploaded');
-    } else {
+    } else if (cfg.fallbackJson) {
       try {
-        const r = await fetch('./questions.json');
+        var r = await fetch(cfg.fallbackJson);
         if (!r.ok) throw new Error('fetch failed');
-        const data = await r.json();
+        var data = await r.json();
         allQuestions = data;
         onQuestionsReady('default');
       } catch {
         showUploadResult('error', 'Could not load built-in questions. Upload a JSON file or load from GitHub to begin.');
         showScreen('home');
       }
+    } else {
+      // Reasoning: no fallback — start empty, prompt to upload
+      onQuestionsReady('default');
     }
   }
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js');
-  }
-});
+  if (!isInit) showScreen('home');
+}
 
 function onQuestionsReady(source) {
   populateTopics();
@@ -83,15 +165,19 @@ function onQuestionsReady(source) {
 // ══════════════════════════════════════════════════════════
 
 function restoreGithubUrl() {
-  const raw = localStorage.getItem(GITHUB_KEY);
-  if (!raw) return;
+  var raw = localStorage.getItem(GITHUB_KEY());
+  if (!raw) {
+    var input = document.getElementById('github-url-input');
+    if (input) input.value = '';
+    return;
+  }
   try {
-    const parsed = JSON.parse(raw);
-    const urls = Array.isArray(parsed) ? parsed : [parsed];
-    const input = document.getElementById('github-url-input');
+    var parsed = JSON.parse(raw);
+    var urls   = Array.isArray(parsed) ? parsed : [parsed];
+    var input  = document.getElementById('github-url-input');
     if (input && urls.length > 0) input.value = urls[0];
   } catch {
-    const input = document.getElementById('github-url-input');
+    var input = document.getElementById('github-url-input');
     if (input) input.value = raw;
   }
 }
@@ -99,51 +185,51 @@ function restoreGithubUrl() {
 function convertToRawUrl(url) {
   url = url.trim();
   if (url.includes('raw.githubusercontent.com')) return url;
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)/);
-  if (match) return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}`;
+  var match = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)/);
+  if (match) return 'https://raw.githubusercontent.com/' + match[1] + '/' + match[2] + '/' + match[3];
   return url;
 }
 
 async function loadFromGithub() {
-  const input  = document.getElementById('github-url-input');
-  const btn    = document.getElementById('btn-github-load');
-  const rawUrl = input ? input.value.trim() : '';
+  var input  = document.getElementById('github-url-input');
+  var btn    = document.getElementById('btn-github-load');
+  var rawUrl = input ? input.value.trim() : '';
 
   if (!rawUrl) { showUploadResult('error', 'Please paste a GitHub raw URL first.'); return; }
 
-  const url = convertToRawUrl(rawUrl);
+  var url = convertToRawUrl(rawUrl);
   btn.disabled = true; btn.textContent = '⏳ Loading…';
   showUploadResult('partial', 'Fetching from GitHub…', url);
 
   try {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status} — check the URL is correct and the repo is public`);
+    var response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status + ' — check the URL is correct and the repo is public');
 
-    const raw = await response.json();
+    var raw = await response.json();
     if (!Array.isArray(raw)) throw new Error('JSON must be an array of question objects');
 
-    let valid = 0, skipped = 0;
-    const newQuestions = [];
+    var valid = 0, skipped = 0;
+    var newQuestions = [];
     raw.forEach(function(item, idx) {
-      const q = validateQuestion(item, idx);
+      var q = validateQuestion(item, idx);
       if (q) { newQuestions.push(q); valid++; } else skipped++;
     });
 
     if (newQuestions.length === 0) throw new Error('No valid questions found (' + skipped + ' invalid entries)');
 
-    const prevLen = allQuestions.length;
-    const merged  = mergeQuestions(allQuestions, newQuestions);
-    const added   = merged.length - prevLen;
-    allQuestions  = merged;
+    var prevLen = allQuestions.length;
+    var merged  = mergeQuestions(allQuestions, newQuestions);
+    var added   = merged.length - prevLen;
+    allQuestions = merged;
 
-    let urls = JSON.parse(localStorage.getItem(GITHUB_KEY) || '[]');
+    var urls = JSON.parse(localStorage.getItem(GITHUB_KEY()) || '[]');
     if (!urls.includes(rawUrl)) urls.push(rawUrl);
-    localStorage.setItem(GITHUB_KEY, JSON.stringify(urls));
+    localStorage.setItem(GITHUB_KEY(), JSON.stringify(urls));
 
     saveToLocalStorage(merged, { files: 1, total: merged.length, source: 'github' });
     populateTopics(); updateHomeStats(); updateBankUI('github'); updateSetupHint();
 
-    const detail = [];
+    var detail = [];
     if (skipped > 0)   detail.push(skipped + ' invalid entries skipped');
     if (added < valid) detail.push((valid - added) + ' duplicates skipped');
     detail.push('URL saved — next visit will remember it');
@@ -159,13 +245,13 @@ async function loadFromGithub() {
 }
 
 async function refreshFromGithub() {
-  const raw = localStorage.getItem(GITHUB_KEY);
+  var raw = localStorage.getItem(GITHUB_KEY());
   if (!raw) { showToast('No GitHub URL saved yet.'); return; }
 
-  const btn = document.getElementById('btn-github-refresh');
+  var btn = document.getElementById('btn-github-refresh');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Refreshing…'; }
 
-  localStorage.removeItem(BANK_KEY);
+  localStorage.removeItem(BANK_KEY());
   allQuestions = [];
   await loadAllGithubSources();
 
@@ -173,21 +259,21 @@ async function refreshFromGithub() {
 }
 
 function clearGithubUrl() {
-  localStorage.removeItem(GITHUB_KEY);
-  const input = document.getElementById('github-url-input');
+  localStorage.removeItem(GITHUB_KEY());
+  var input = document.getElementById('github-url-input');
   if (input) input.value = '';
   updateBankUI('default');
   showToast('GitHub URL cleared.');
 }
 
 async function loadAllGithubSources() {
-  const urls = getSavedGithubUrls();
+  var urls = getSavedGithubUrls();
   if (urls.length === 0) return;
 
   showUploadResult('partial', '⏳ Auto-refreshing ' + urls.length + ' GitHub source' + (urls.length > 1 ? 's' : '') + '...');
 
-  let totalAdded = 0;
-  for (const url of urls) { totalAdded += await fetchAndMergeGithubUrl(url); }
+  var totalAdded = 0;
+  for (var i = 0; i < urls.length; i++) { totalAdded += await fetchAndMergeGithubUrl(urls[i]); }
 
   saveToLocalStorage(allQuestions, { files: urls.length, total: allQuestions.length, source: 'github' });
   populateTopics(); updateHomeStats(); updateBankUI('github'); updateSetupHint();
@@ -202,14 +288,14 @@ async function loadAllGithubSources() {
 
 async function fetchAndMergeGithubUrl(rawUrl) {
   try {
-    const url = convertToRawUrl(rawUrl);
-    const response = await fetch(url, { cache: 'no-store' });
+    var url      = convertToRawUrl(rawUrl);
+    var response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
-    const raw = await response.json();
+    var raw = await response.json();
     if (!Array.isArray(raw)) throw new Error('Not an array');
-    const newQuestions = [];
-    raw.forEach(function(item, idx) { const q = validateQuestion(item, idx); if (q) newQuestions.push(q); });
-    const prevLen = allQuestions.length;
+    var newQuestions = [];
+    raw.forEach(function(item, idx) { var q = validateQuestion(item, idx); if (q) newQuestions.push(q); });
+    var prevLen  = allQuestions.length;
     allQuestions = mergeQuestions(allQuestions, newQuestions);
     return allQuestions.length - prevLen;
   } catch (err) { console.error('GitHub load failed for', rawUrl, ':', err); return 0; }
@@ -222,24 +308,24 @@ async function fetchAndMergeGithubUrl(rawUrl) {
 function handleFileUpload(files) {
   if (!files || files.length === 0) return;
 
-  const dropLabel = document.getElementById('drop-zone').querySelector('.drop-label');
+  var dropLabel = document.getElementById('drop-zone').querySelector('.drop-label');
   dropLabel.textContent = 'Reading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '...';
 
-  const fileArray = Array.from(files);
-  Promise.allSettled(fileArray.map(readFileAsJSON)).then(results => {
-    let totalValid = 0, totalSkipped = 0, filesOk = 0, filesFailed = 0;
-    const details = [], newQuestions = [];
+  var fileArray = Array.from(files);
+  Promise.allSettled(fileArray.map(readFileAsJSON)).then(function(results) {
+    var totalValid = 0, totalSkipped = 0, filesOk = 0, filesFailed = 0;
+    var details = [], newQuestions = [];
 
-    results.forEach((result, i) => {
-      const fname = fileArray[i].name;
+    results.forEach(function(result, i) {
+      var fname = fileArray[i].name;
       if (result.status === 'rejected') {
         filesFailed++; details.push('FAIL ' + fname + ': ' + result.reason);
         return;
       }
-      const { valid, skipped, questions } = result.value;
-      filesOk++; totalValid += valid; totalSkipped += skipped;
-      newQuestions.push(...questions);
-      details.push('OK ' + fname + ': ' + valid + ' valid' + (skipped > 0 ? ', ' + skipped + ' skipped' : ''));
+      var v = result.value;
+      filesOk++; totalValid += v.valid; totalSkipped += v.skipped;
+      newQuestions.push.apply(newQuestions, v.questions);
+      details.push('OK ' + fname + ': ' + v.valid + ' valid' + (v.skipped > 0 ? ', ' + v.skipped + ' skipped' : ''));
     });
 
     if (newQuestions.length === 0) {
@@ -248,42 +334,42 @@ function handleFileUpload(files) {
       return;
     }
 
-    const prevLen = allQuestions.length;
-    const merged  = mergeQuestions(allQuestions, newQuestions);
-    const added   = merged.length - prevLen;
-    allQuestions  = merged;
+    var prevLen = allQuestions.length;
+    var merged  = mergeQuestions(allQuestions, newQuestions);
+    var added   = merged.length - prevLen;
+    allQuestions = merged;
 
     saveToLocalStorage(merged, { files: filesOk, total: merged.length, source: 'uploaded' });
     populateTopics(); updateHomeStats(); updateBankUI('uploaded'); resetDropZone(); updateSetupHint();
 
-    const type = filesFailed > 0 ? 'partial' : 'success';
-    const headline = filesFailed > 0
+    var type = filesFailed > 0 ? 'partial' : 'success';
+    var headline = filesFailed > 0
       ? 'Loaded ' + added + ' new questions (' + filesFailed + ' file' + (filesFailed > 1 ? 's' : '') + ' failed)'
       : 'Loaded ' + totalValid + ' questions from ' + filesOk + ' file' + (filesOk > 1 ? 's' : '');
 
-    const detailParts = [];
+    var detailParts = [];
     if (added < totalValid) detailParts.push((totalValid - added) + ' duplicates removed');
     if (totalSkipped > 0)   detailParts.push(totalSkipped + ' invalid questions skipped');
-    detailParts.push(...details);
+    detailParts.push.apply(detailParts, details);
     showUploadResult(type, headline, detailParts.join(' · '));
   });
 }
 
 function readFileAsJSON(file) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function(resolve, reject) {
     if (!file.name.toLowerCase().endsWith('.json')) { reject('Not a .json file'); return; }
-    const reader = new FileReader();
+    var reader = new FileReader();
     reader.onload = function(e) {
-      let raw;
+      var raw;
       try { raw = JSON.parse(e.target.result); } catch { reject('Invalid JSON syntax'); return; }
       if (!Array.isArray(raw)) { reject('JSON must be an array'); return; }
-      let valid = 0, skipped = 0;
-      const questions = [];
+      var valid = 0, skipped = 0;
+      var questions = [];
       raw.forEach(function(item, idx) {
-        const q = validateQuestion(item, idx);
+        var q = validateQuestion(item, idx);
         if (q) { questions.push(q); valid++; } else skipped++;
       });
-      resolve({ valid, skipped, questions });
+      resolve({ valid: valid, skipped: skipped, questions: questions });
     };
     reader.onerror = function() { reject('FileReader error'); };
     reader.readAsText(file);
@@ -292,27 +378,30 @@ function readFileAsJSON(file) {
 
 function validateQuestion(item, idx) {
   if (typeof item !== 'object' || item === null) return null;
-  const question = String(item.question || '').trim();
+  var question = String(item.question || '').trim();
   if (!question) return null;
   if (!Array.isArray(item.options) || (item.options.length !== 4 && item.options.length !== 5)) return null;
-  const options = item.options.map(function(o) { return String(o || '').trim(); });
+  var options = item.options.map(function(o) { return String(o || '').trim(); });
   if (options.some(function(o) { return o === ''; })) return null;
-  const correct = String(item.correct || '').trim();
+  var correct = String(item.correct || '').trim();
   if (!correct || !options.includes(correct)) return null;
-  const topic = String(item.topic || 'General').trim();
-  const id    = item.id != null ? item.id : stableHash(question);
+  var topic = String(item.topic || 'General').trim();
+  var id    = item.id != null ? item.id : stableHash(question);
   return { id: id, question: question, options: options, correct: correct, topic: topic };
 }
 
 function mergeQuestions(existing, incoming) {
-  const seenIds  = new Set(existing.map(function(q) { return String(q.id); }));
-  const seenText = new Set(existing.map(function(q) { return q.question.toLowerCase().trim(); }));
-  const toAdd    = [];
+  var seenIds  = new Set(existing.map(function(q) { return String(q.id); }));
+  var seenText = new Set(existing.map(function(q) { return q.question.toLowerCase().trim(); }));
+  var toAdd    = [];
   incoming.forEach(function(q) {
-    const text = q.question.toLowerCase().trim();
+    var text = q.question.toLowerCase().trim();
     if (seenText.has(text)) return;
-    let sid = String(q.id);
-    if (seenIds.has(sid)) { sid = stableHash(text + '_' + Date.now() + '_' + Math.random()); q = Object.assign({}, q, { id: sid }); }
+    var sid = String(q.id);
+    if (seenIds.has(sid)) {
+      sid = stableHash(text + '_' + Date.now() + '_' + Math.random());
+      q = Object.assign({}, q, { id: sid });
+    }
     seenIds.add(sid); seenText.add(text); toAdd.push(q);
   });
   return existing.concat(toAdd);
@@ -320,28 +409,28 @@ function mergeQuestions(existing, incoming) {
 
 function saveToLocalStorage(questions, meta) {
   try {
-    localStorage.setItem(BANK_KEY, JSON.stringify(questions));
-    localStorage.setItem(META_KEY, JSON.stringify(meta));
+    localStorage.setItem(BANK_KEY(), JSON.stringify(questions));
+    localStorage.setItem(META_KEY(), JSON.stringify(meta));
   } catch(e) {
     try {
-      localStorage.removeItem(BANK_KEY);
-      localStorage.setItem(BANK_KEY, JSON.stringify(questions));
-      localStorage.setItem(META_KEY, JSON.stringify(meta));
+      localStorage.removeItem(BANK_KEY());
+      localStorage.setItem(BANK_KEY(), JSON.stringify(questions));
+      localStorage.setItem(META_KEY(), JSON.stringify(meta));
     } catch { showUploadResult('error', 'Storage quota exceeded. Try a smaller question bank.'); }
   }
 }
 
 function loadFromLocalStorage() {
   try {
-    const raw = localStorage.getItem(BANK_KEY);
+    var raw = localStorage.getItem(BANK_KEY());
     if (!raw) return false;
-    const parsed = JSON.parse(raw);
+    var parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return false;
     allQuestions = parsed; return true;
   } catch { return false; }
 }
 
-var clearConfirmStep = 0;
+var clearConfirmStep  = 0;
 var clearConfirmTimer = null;
 
 function clearQuestionBank() {
@@ -368,13 +457,22 @@ function clearQuestionBank() {
     clearConfirmStep = 0;
     clearTimeout(clearConfirmTimer);
     updateClearBtnLabel();
-    localStorage.removeItem(BANK_KEY); localStorage.removeItem(META_KEY); localStorage.removeItem(GITHUB_KEY);
+    localStorage.removeItem(BANK_KEY());
+    localStorage.removeItem(META_KEY());
+    localStorage.removeItem(GITHUB_KEY());
     allQuestions = [];
-    showUploadResult('partial', 'Bank cleared. Reloading built-in questions…');
-    fetch('./questions.json').then(function(r) { return r.json(); }).then(function(data) {
-      allQuestions = data; onQuestionsReady('default');
-      showUploadResult('success', '✅ Built-in questions restored (' + data.length + ' questions). GitHub URL also cleared.');
-    }).catch(function() { showUploadResult('error', 'Could not reload built-in questions.'); showScreen('home'); });
+
+    var cfg = SUBJECTS[activeSubject];
+    if (cfg.fallbackJson) {
+      showUploadResult('partial', 'Bank cleared. Reloading built-in questions…');
+      fetch(cfg.fallbackJson).then(function(r) { return r.json(); }).then(function(data) {
+        allQuestions = data; onQuestionsReady('default');
+        showUploadResult('success', '✅ Built-in questions restored (' + data.length + ' questions). GitHub URL also cleared.');
+      }).catch(function() { showUploadResult('error', 'Could not reload built-in questions.'); showScreen('home'); });
+    } else {
+      showUploadResult('success', '✅ Bank cleared. Upload a JSON file to begin.');
+      onQuestionsReady('default');
+    }
   }
 }
 
@@ -382,7 +480,7 @@ function updateClearBtnLabel() {
   var btn = document.getElementById('btn-clear-bank');
   if (!btn) return;
   var labels = ['🗑 Clear Bank','⚠️ Tap again (1/4)','⚠️ Tap again (2/4)','🔴 Tap again (3/4)','💀 Tap to CONFIRM DELETE (4/4)'];
-  btn.textContent = labels[Math.min(clearConfirmStep, 4)];
+  btn.textContent     = labels[Math.min(clearConfirmStep, 4)];
   btn.style.color       = clearConfirmStep >= 3 ? 'var(--red)' : '';
   btn.style.borderColor = clearConfirmStep >= 3 ? 'var(--red)' : '';
 }
@@ -390,21 +488,23 @@ function updateClearBtnLabel() {
 // ── Upload UI helpers ──────────────────────────────────────
 
 function updateBankUI(source) {
-  const badge      = document.getElementById('upload-source-badge');
-  const status     = document.getElementById('bank-status');
-  const clearBtn   = document.getElementById('btn-clear-bank');
-  const refreshBtn = document.getElementById('btn-github-refresh');
-  const exportBtn  = document.getElementById('btn-export');
-  const savedGithubUrls = getSavedGithubUrls();
-  const hasGithub  = savedGithubUrls.length > 0;
-  const meta       = getStoredMeta();
+  var badge      = document.getElementById('upload-source-badge');
+  var status     = document.getElementById('bank-status');
+  var clearBtn   = document.getElementById('btn-clear-bank');
+  var refreshBtn = document.getElementById('btn-github-refresh');
+  var exportBtn  = document.getElementById('btn-export');
+  var savedGithubUrls = getSavedGithubUrls();
+  var hasGithub  = savedGithubUrls.length > 0;
+  var meta       = getStoredMeta();
+
+  badge.classList.remove('uploaded', 'github');
 
   if (source === 'github' && meta) {
     badge.textContent = 'GITHUB'; badge.classList.add('uploaded', 'github');
     status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
     clearBtn.style.display = 'flex';
   } else if (source === 'uploaded' && meta) {
-    badge.textContent = 'CUSTOM'; badge.classList.add('uploaded'); badge.classList.remove('github');
+    badge.textContent = 'CUSTOM'; badge.classList.add('uploaded');
     status.textContent = allQuestions.length + ' questions from ' + meta.files + ' file' + (meta.files !== 1 ? 's' : '');
     clearBtn.style.display = 'flex';
   } else {
@@ -414,30 +514,37 @@ function updateBankUI(source) {
       status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
       clearBtn.style.display = 'flex';
     } else {
-      badge.classList.remove('uploaded', 'github');
-      status.textContent = allQuestions.length + ' built-in questions';
+      status.textContent = allQuestions.length > 0
+        ? allQuestions.length + ' built-in questions'
+        : (SUBJECTS[activeSubject].fallbackJson ? 'Using built-in questions' : 'No questions loaded — upload a JSON file');
       clearBtn.style.display = 'none';
     }
   }
 
-  if (exportBtn) { exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none'; exportBtn.textContent = '⬇ Export All (' + allQuestions.length + ' Qs)'; }
-  if (refreshBtn) { refreshBtn.style.display = hasGithub ? 'flex' : 'none'; if (hasGithub) refreshBtn.textContent = '🔄 Refresh (' + savedGithubUrls.length + ')'; }
+  if (exportBtn) {
+    exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
+    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
+  }
+  if (refreshBtn) {
+    refreshBtn.style.display = hasGithub ? 'flex' : 'none';
+    if (hasGithub) refreshBtn.textContent = '🔄 Refresh (' + savedGithubUrls.length + ')';
+  }
 
   restoreGithubUrl();
 }
 
 function getSavedGithubUrls() {
-  const raw = localStorage.getItem(GITHUB_KEY);
+  var raw = localStorage.getItem(GITHUB_KEY());
   if (!raw) return [];
-  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [p]; } catch { return raw ? [raw] : []; }
+  try { var p = JSON.parse(raw); return Array.isArray(p) ? p : [p]; } catch { return raw ? [raw] : []; }
 }
 
 function getStoredMeta() {
-  try { return JSON.parse(localStorage.getItem(META_KEY)); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(META_KEY())); } catch { return null; }
 }
 
 function showUploadResult(type, headline, detail) {
-  const el = document.getElementById('upload-result');
+  var el = document.getElementById('upload-result');
   el.style.display = 'block'; el.className = 'upload-result ' + type;
   el.innerHTML = '<div style="font-weight:600">' + headline + '</div>' + (detail ? '<div class="result-detail">' + detail + '</div>' : '');
 }
@@ -455,12 +562,14 @@ function stableHash(str) {
 
 function exportQuestionBank() {
   if (allQuestions.length === 0) { showToast('No questions to export!'); return; }
-  const exportData = allQuestions.map(function(q) { return { id: q.id, topic: q.topic, question: q.question, options: q.options.slice(), correct: q.correct }; });
-  const json = JSON.stringify(exportData, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const filename = 'mathquiz-questions-' + exportData.length + '-' + getTodayStr() + '.json';
-  const a = document.createElement('a');
+  var exportData = allQuestions.map(function(q) {
+    return { id: q.id, topic: q.topic, question: q.question, options: q.options.slice(), correct: q.correct };
+  });
+  var json     = JSON.stringify(exportData, null, 2);
+  var blob     = new Blob([json], { type: 'application/json' });
+  var url      = URL.createObjectURL(blob);
+  var filename = activeSubject + 'quiz-questions-' + exportData.length + '-' + getTodayStr() + '.json';
+  var a        = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
@@ -469,7 +578,7 @@ function exportQuestionBank() {
 }
 
 function getTodayStr() {
-  const d = new Date();
+  var d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
@@ -478,22 +587,21 @@ function getTodayStr() {
 // ══════════════════════════════════════════════════════════
 
 function loadWeakStats() {
-  try { weakStats = JSON.parse(localStorage.getItem(WEAK_KEY)) || {}; } catch { weakStats = {}; }
+  try { weakStats = JSON.parse(localStorage.getItem(WEAK_KEY())) || {}; } catch { weakStats = {}; }
 }
 
-function saveWeakStats() { localStorage.setItem(WEAK_KEY, JSON.stringify(weakStats)); }
+function saveWeakStats() { localStorage.setItem(WEAK_KEY(), JSON.stringify(weakStats)); }
 
 function populateTopics() {
-  const topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
-  const list   = document.getElementById('multi-select-list');
+  var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+  var list   = document.getElementById('multi-select-list');
   if (!list) return;
 
-  // Keep previously selected topics that still exist
   selectedTopics = selectedTopics.filter(function(t) { return topics.includes(t); });
 
   list.innerHTML = topics.map(function(t) {
-    const checked = selectedTopics.includes(t) ? 'checked' : '';
-    const count   = allQuestions.filter(function(q) { return q.topic === t; }).length;
+    var checked = selectedTopics.includes(t) ? 'checked' : '';
+    var count   = allQuestions.filter(function(q) { return q.topic === t; }).length;
     return '<label class="multi-select-item">' +
       '<input type="checkbox" class="topic-checkbox" value="' + escHtml(t) + '" ' + checked + '/>' +
       '<span class="topic-item-name">' + escHtml(t) + '</span>' +
@@ -501,7 +609,10 @@ function populateTopics() {
       '</label>';
   }).join('');
 
-  // Bind checkbox events
+  if (topics.length === 0) {
+    list.innerHTML = '<div style="padding:12px 14px;font-size:0.82rem;color:var(--muted);font-weight:600">No questions loaded yet.</div>';
+  }
+
   list.querySelectorAll('.topic-checkbox').forEach(function(cb) {
     cb.addEventListener('change', function() {
       if (this.checked) {
@@ -519,7 +630,7 @@ function populateTopics() {
 }
 
 function updateMultiSelectLabel() {
-  const label = document.getElementById('multi-select-label');
+  var label = document.getElementById('multi-select-label');
   if (!label) return;
   if (selectedTopics.length === 0) {
     label.textContent = 'Select topics…';
@@ -531,21 +642,21 @@ function updateMultiSelectLabel() {
 }
 
 function updateTopicQCount() {
-  const hint = document.getElementById('topic-q-count');
+  var hint = document.getElementById('topic-q-count');
   if (!hint) return;
   if (selectedTopics.length === 0) {
     hint.textContent = 'Select at least one topic to start';
     return;
   }
-  const count = allQuestions.filter(function(q) { return selectedTopics.includes(q.topic); }).length;
+  var count = allQuestions.filter(function(q) { return selectedTopics.includes(q.topic); }).length;
   hint.textContent = count + ' question' + (count !== 1 ? 's' : '') + ' in selection';
 }
 
 function updateHomeStats() {
-  const weakCount      = getWeakQuestions().length;
-  const totalAttempted = Object.values(weakStats).reduce(function(s, v) { return s + v.attempts; }, 0);
+  var weakCount      = getWeakQuestions().length;
+  var totalAttempted = Object.values(weakStats).reduce(function(s, v) { return s + v.attempts; }, 0);
 
-  document.getElementById('stat-total').textContent     = allQuestions.length;
+  document.getElementById('stat-total').textContent     = allQuestions.length || '—';
   document.getElementById('stat-weak').textContent      = weakCount;
   document.getElementById('stat-attempted').textContent = totalAttempted;
 
@@ -553,16 +664,19 @@ function updateHomeStats() {
   document.getElementById('btn-weak-test').disabled = weakCount === 0;
   document.getElementById('weak-count-badge').textContent = weakCount > 0 ? weakCount + ' weak' : 'none yet';
 
-  const exportBtn = document.getElementById('btn-export');
-  if (exportBtn) { exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none'; exportBtn.textContent = '⬇ Export All (' + allQuestions.length + ' Qs)'; }
+  var exportBtn = document.getElementById('btn-export');
+  if (exportBtn) {
+    exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
+    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
+  }
 }
 
 function updateSetupHint() {
-  const hint = document.getElementById('setup-available-hint');
+  var hint = document.getElementById('setup-available-hint');
   if (hint) hint.textContent = allQuestions.length + ' questions available';
-  const inp = document.getElementById('overall-q-count');
+  var inp = document.getElementById('overall-q-count');
   if (inp && allQuestions.length > 0 && parseInt(inp.value) > allQuestions.length) {
-    inp.value = allQuestions.length;
+    inp.value    = allQuestions.length;
     overallQCount = allQuestions.length;
   }
 }
@@ -577,10 +691,7 @@ function startTimer() {
   timerSeconds = 0;
   updateTimerDisplay();
   document.getElementById('timer-display').style.display = 'flex';
-  timerInterval = setInterval(function() {
-    timerSeconds++;
-    updateTimerDisplay();
-  }, 1000);
+  timerInterval = setInterval(function() { timerSeconds++; updateTimerDisplay(); }, 1000);
 }
 
 function stopTimer() {
@@ -588,15 +699,15 @@ function stopTimer() {
 }
 
 function updateTimerDisplay() {
-  const m = Math.floor(timerSeconds / 60);
-  const s = timerSeconds % 60;
+  var m = Math.floor(timerSeconds / 60);
+  var s = timerSeconds % 60;
   document.getElementById('timer-value').textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
 function formatTime(seconds) {
   if (!seconds && seconds !== 0) return '—';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  var m = Math.floor(seconds / 60);
+  var s = seconds % 60;
   if (m === 0) return s + 's';
   return m + 'm ' + s + 's';
 }
@@ -606,42 +717,44 @@ function formatTime(seconds) {
 // ══════════════════════════════════════════════════════════
 
 function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY())) || []; } catch { return []; }
 }
 
 function saveSession(entry) {
-  const history = loadHistory();
-  history.unshift(entry); // newest first
-  // Keep last 100 sessions max
+  var history = loadHistory();
+  history.unshift(entry);
   if (history.length > 100) history.pop();
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  localStorage.setItem(HISTORY_KEY(), JSON.stringify(history));
 }
 
 function buildSessionEntry() {
-  const pct = attempted > 0 ? Math.round((score / attempted) * 100) : 0;
+  var pct = attempted > 0 ? Math.round((score / attempted) * 100) : 0;
   return {
-    id:        Date.now(),
-    date:      new Date().toISOString(),
-    mode:      currentMode,          // normal | overall | weaktest | retry
-    topic:     currentMode === 'normal' ? (selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics') : (currentMode === 'overall' ? 'All Topics' : 'Weak'),
-    total:     attempted,
-    correct:   score,
-    wrong:     attempted - score,
-    pct:       pct,
-    timeSecs:  timerMode === 'countup' ? timerSeconds : null
+    id:       Date.now(),
+    date:     new Date().toISOString(),
+    subject:  activeSubject,
+    mode:     currentMode,
+    topic:    currentMode === 'normal'
+                ? (selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics')
+                : (currentMode === 'overall' ? 'All Topics' : 'Weak'),
+    total:    attempted,
+    correct:  score,
+    wrong:    attempted - score,
+    pct:      pct,
+    timeSecs: timerMode === 'countup' ? timerSeconds : null
   };
 }
 
 function renderHistory(filterTab) {
-  const all      = loadHistory();
-  const filtered = filterTab === 'all' ? all : all.filter(function(s) {
+  var all      = loadHistory();
+  var filtered = filterTab === 'all' ? all : all.filter(function(s) {
     if (filterTab === 'topic')   return s.mode === 'normal';
     if (filterTab === 'overall') return s.mode === 'overall';
     if (filterTab === 'weak')    return s.mode === 'weaktest' || s.mode === 'retry';
     return true;
   });
 
-  const container = document.getElementById('history-list');
+  var container = document.getElementById('history-list');
 
   if (filtered.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>No sessions yet' + (filterTab !== 'all' ? ' in this category' : '') + '.</p></div>';
@@ -649,16 +762,20 @@ function renderHistory(filterTab) {
   }
 
   container.innerHTML = filtered.map(function(s) {
-    const d    = new Date(s.date);
-    const dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-    const modeLabel = s.mode === 'overall' ? '🌐 Overall' : s.mode === 'normal' ? '📘 Topic' : s.mode === 'weaktest' ? '🔴 Weak Test' : '🔁 Retry';
-    const pctColor  = s.pct >= 80 ? 'var(--green)' : s.pct >= 50 ? 'var(--amber)' : 'var(--red)';
-    const timeInfo  = s.timeSecs != null ? '<span class="hist-time">⏱ ' + formatTime(s.timeSecs) + '</span>' : '';
+    var d        = new Date(s.date);
+    var dateStr  = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    var timeStr  = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    var modeLabel = s.mode === 'overall' ? '🌐 Overall' : s.mode === 'normal' ? '📘 Topic' : s.mode === 'weaktest' ? '🔴 Weak Test' : '🔁 Retry';
+    var pctColor  = s.pct >= 80 ? 'var(--green)' : s.pct >= 50 ? 'var(--amber)' : 'var(--red)';
+    var timeInfo  = s.timeSecs != null ? '<span class="hist-time">⏱ ' + formatTime(s.timeSecs) + '</span>' : '';
+    // Subject badge in history
+    var subjCfg   = SUBJECTS[s.subject] || SUBJECTS['maths'];
+    var subjBadge = '<span class="hist-subject-badge hist-subj-' + (s.subject || 'maths') + '">' + subjCfg.icon + ' ' + (s.subject === 'reasoning' ? 'Reasoning' : 'Maths') + '</span>';
 
     return '<div class="history-item">' +
       '<div class="hist-top">' +
         '<span class="hist-mode">' + modeLabel + '</span>' +
+        subjBadge +
         '<span class="hist-topic">' + escHtml(s.topic) + '</span>' +
         timeInfo +
       '</div>' +
@@ -695,28 +812,28 @@ function bindEvents() {
   });
   document.getElementById('btn-overall-setup-back').addEventListener('click', function() { showScreen('home'); });
   document.getElementById('btn-start-overall').addEventListener('click', function() {
-    const val = parseInt(document.getElementById('overall-q-count').value) || 20;
+    var val = parseInt(document.getElementById('overall-q-count').value) || 20;
     overallQCount = Math.max(1, Math.min(val, allQuestions.length || val));
-    const radios = document.querySelectorAll('input[name="timer-mode"]');
+    var radios = document.querySelectorAll('input[name="timer-mode"]');
     radios.forEach(function(r) { if (r.checked) timerMode = r.value; });
     startQuiz('overall');
   });
 
   // Number stepper
   document.getElementById('num-dec').addEventListener('click', function() {
-    const inp = document.getElementById('overall-q-count');
-    const val = parseInt(inp.value) || 20;
+    var inp = document.getElementById('overall-q-count');
+    var val = parseInt(inp.value) || 20;
     if (val > 1) inp.value = val - 1;
   });
   document.getElementById('num-inc').addEventListener('click', function() {
-    const inp  = document.getElementById('overall-q-count');
-    const val  = parseInt(inp.value) || 20;
-    const max  = allQuestions.length || 500;
+    var inp = document.getElementById('overall-q-count');
+    var val = parseInt(inp.value) || 20;
+    var max = allQuestions.length || 500;
     if (val < max) inp.value = val + 1;
   });
   document.getElementById('overall-q-count').addEventListener('change', function() {
-    const max = allQuestions.length || 500;
-    let val = parseInt(this.value) || 1;
+    var max = allQuestions.length || 500;
+    var val = parseInt(this.value) || 1;
     val = Math.max(1, Math.min(val, max));
     this.value = val;
   });
@@ -734,8 +851,8 @@ function bindEvents() {
   // History
   document.getElementById('btn-history-home').addEventListener('click', function() { showScreen('home'); });
   document.getElementById('btn-clear-history').addEventListener('click', function() {
-    if (confirm('Clear all session history? This cannot be undone.')) {
-      localStorage.removeItem(HISTORY_KEY);
+    if (confirm('Clear all session history for ' + SUBJECTS[activeSubject].label + '? This cannot be undone.')) {
+      localStorage.removeItem(HISTORY_KEY());
       renderHistory('all');
       showToast('History cleared.');
     }
@@ -808,7 +925,6 @@ function bindEvents() {
 function startQuiz(mode) {
   if (allQuestions.length === 0) { showToast('No questions loaded!'); return; }
 
-  // For retry — capture sessionWrong BEFORE resetting state
   var retryQueue = [];
   if (mode === 'retry') {
     if (sessionWrong.length === 0) { showToast('No wrong answers this session!'); return; }
@@ -821,7 +937,6 @@ function startQuiz(mode) {
   sessionWrong = [];
   sessionIndex = 0;
 
-  // If not overall, reset timer mode to none (timer only for overall)
   if (mode !== 'overall') timerMode = 'none';
 
   if (mode === 'normal') {
@@ -844,9 +959,7 @@ function startQuiz(mode) {
 
   if (sessionQueue.length === 0) { showToast('No questions for this filter!'); return; }
 
-  // Start timer if enabled
   startTimer();
-
   showScreen('quiz');
   updateModeIndicator();
   loadQuestion();
@@ -961,7 +1074,6 @@ function showResult() {
   document.getElementById('result-correct').textContent = score;
   document.getElementById('result-wrong').textContent   = attempted - score;
 
-  // Show timer row if we used count-up
   var timeRow = document.getElementById('result-time-row');
   if (timerMode === 'countup') {
     timeRow.style.display = 'flex';
@@ -982,7 +1094,6 @@ function showResult() {
   retryBtn.style.display = sessionWrong.length > 0 ? 'flex' : 'none';
   if (sessionWrong.length > 0) retryBtn.textContent = '🔁 Retry ' + sessionWrong.length + ' Wrong';
 
-  // Save to history
   if (attempted > 0) saveSession(buildSessionEntry());
 
   showScreen('result');
@@ -1044,13 +1155,14 @@ function updateModeIndicator() {
     var topicLabel = selectedTopics.length === 0 ? 'No Topic' : selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics';
     el.textContent = '🟡 ' + topicLabel; el.className = 'mode-indicator normal';
   }
-  // Show/hide timer display bar based on mode
   document.getElementById('timer-display').style.display = (timerMode === 'countup') ? 'flex' : 'none';
 }
 
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
   document.getElementById('screen-' + name).classList.add('active');
+  // Show/hide subject tabs only on home screen
+  document.querySelector('.subject-tab-bar').style.display = (name === 'home') ? 'flex' : 'none';
 }
 
 function shuffle(arr) {
