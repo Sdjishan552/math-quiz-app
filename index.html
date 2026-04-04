@@ -22,6 +22,18 @@
       <span id="logo-text">MathQuiz</span>
     </div>
     <span class="logo-sub">Adaptive Practice Engine</span>
+
+    <!-- XP Bar -->
+    <div class="xp-bar-wrap" id="xp-bar-wrap">
+      <div class="xp-bar-top">
+        <span class="xp-level-badge" id="xp-level-badge">Lv.1</span>
+        <span class="xp-rank-title" id="xp-rank-title">🥉 Novice</span>
+        <span class="xp-bar-label" id="xp-bar-label">0 XP</span>
+      </div>
+      <div class="xp-bar-track">
+        <div class="xp-bar-fill" id="xp-bar-fill" style="width:0%"></div>
+      </div>
+    </div>
   </header>
 
   <!-- ── Subject Tabs ─────────────────────────────────────── -->
@@ -184,6 +196,15 @@
       📊 Session History
     </button>
 
+    <div class="home-quick-row">
+      <button class="btn btn-bookmark-home" id="btn-bookmarks">
+        🔖 Bookmarks <span class="weak-badge" id="bookmark-count-badge">none yet</span>
+      </button>
+      <button class="btn btn-analytics-home" id="btn-analytics">
+        📈 Analytics
+      </button>
+    </div>
+
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
@@ -269,7 +290,10 @@
 
     <!-- Question card -->
     <div class="question-card">
-      <span class="q-number" id="q-number">Question 1</span>
+      <div class="q-card-top-row">
+        <span class="q-number" id="q-number">Question 1</span>
+        <button class="btn-bookmark-q" id="btn-bookmark" title="Bookmark this question">🏷️</button>
+      </div>
       <div id="q-weak-stat" style="margin-bottom:10px;display:none"></div>
       <p class="q-text" id="q-text">Loading…</p>
     </div>
@@ -384,6 +408,69 @@
     <div id="history-list" style="display:flex;flex-direction:column;gap:10px"></div>
 
     <button class="btn btn-ghost" id="btn-history-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- BOOKMARKS SCREEN                                      -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-bookmarks" class="screen">
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="weak-list-title">🔖 Bookmarks</span>
+    </div>
+
+    <p style="font-size:0.78rem;color:var(--muted)" id="bookmark-count-text">0 questions bookmarked</p>
+
+    <div id="bookmark-list" style="display:flex;flex-direction:column;gap:10px"></div>
+
+    <button class="btn btn-overall" id="btn-start-bookmark-quiz" disabled>▶ Quiz My Bookmarks</button>
+    <button class="btn btn-ghost" id="btn-bookmark-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ANALYTICS SCREEN                                      -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-analytics" class="screen">
+
+    <span class="weak-list-title">📈 Analytics</span>
+
+    <!-- Summary row -->
+    <div class="analytics-summary-grid">
+      <div class="analytics-summary-box">
+        <span class="analytics-summary-val" id="analytics-overall-pct">—</span>
+        <span class="analytics-summary-label">Overall Accuracy</span>
+      </div>
+      <div class="analytics-summary-box">
+        <span class="analytics-summary-val" id="analytics-total-attempts">0</span>
+        <span class="analytics-summary-label">Total Attempts</span>
+      </div>
+      <div class="analytics-summary-box">
+        <span class="analytics-summary-val" id="analytics-topics-done">0</span>
+        <span class="analytics-summary-label">Topics Tried</span>
+      </div>
+    </div>
+
+    <!-- Rank card -->
+    <div class="analytics-rank-card">
+      <div class="analytics-rank-left">
+        <span class="analytics-rank-label">Your Rank</span>
+        <span class="analytics-rank-val" id="analytics-rank-val">🥉 Novice (Lv.1)</span>
+      </div>
+      <div class="analytics-rank-right">
+        <span class="analytics-xp-label">Total XP</span>
+        <span class="analytics-xp-val" id="analytics-xp-val">0 XP</span>
+      </div>
+    </div>
+
+    <!-- Topic accuracy list -->
+    <div class="home-card" style="padding:18px">
+      <h2 style="margin-bottom:16px">Topic Accuracy <span style="font-size:0.7rem;color:var(--muted);font-weight:600">(worst → best)</span></h2>
+      <div id="analytics-topic-list" style="display:flex;flex-direction:column;gap:14px"></div>
+    </div>
+
+    <button class="btn btn-ghost" id="btn-analytics-home">← Back to Home</button>
 
   </section>
 
