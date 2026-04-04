@@ -5,7 +5,7 @@
    + All state (bank, weak, github, history) namespaced per subject
    + Everything else works exactly as before
    ============================================================ */
-
+  
 // ── Subject config ─────────────────────────────────────────
 const SUBJECTS = {
   maths: {
