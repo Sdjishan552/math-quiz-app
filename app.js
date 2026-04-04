@@ -5,7 +5,7 @@
    + All state (bank, weak, github, history) namespaced per subject
    + Everything else works exactly as before
    ============================================================ */
-  
+
 // ── Subject config ─────────────────────────────────────────
 const SUBJECTS = {
   maths: {
@@ -82,6 +82,16 @@ let overallQCount  = 20;
 
 // ── Boot ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // ── Theme init ──────────────────────────────────────────
+  var savedTheme = localStorage.getItem('quiz_theme') || 'dark';
+  applyTheme(savedTheme);
+  document.getElementById('theme-toggle').addEventListener('click', function() {
+    var current = document.documentElement.getAttribute('data-theme') || 'dark';
+    var next    = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem('quiz_theme', next);
+  });
+
   bindSubjectTabs();
   bindEvents();
   loadBookmarks();
@@ -1409,6 +1419,13 @@ function showAnalyticsScreen() {
 
 // ══════════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  var btn  = document.getElementById('theme-toggle');
+  var icon = btn ? btn.querySelector('.theme-toggle-icon') : null;
+  if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
 
 function updateModeIndicator() {
   var el = document.getElementById('mode-indicator');
