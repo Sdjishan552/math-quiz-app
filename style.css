@@ -1380,3 +1380,426 @@ header {
   border: 1px solid rgba(0,212,255,0.3);
   color: var(--cyan);
 }
+
+/* ══════════════════════════════════════════════════════════
+   XP BAR — Header gamification strip
+   ══════════════════════════════════════════════════════════ */
+
+.xp-bar-wrap {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px 10px;
+  box-shadow: 0 0 20px rgba(162,89,255,0.1);
+}
+
+.xp-bar-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.xp-level-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--grad-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.xp-rank-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text);
+  flex: 1;
+  text-align: left;
+}
+
+.xp-bar-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.xp-bar-track {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.xp-bar-fill {
+  height: 100%;
+  background: var(--grad-main);
+  border-radius: 6px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(162,89,255,0.5);
+}
+
+/* ══════════════════════════════════════════════════════════
+   BOOKMARK BUTTON — in quiz question card
+   ══════════════════════════════════════════════════════════ */
+
+.q-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.q-card-top-row .q-number {
+  margin-bottom: 0;
+}
+
+.btn-bookmark-q {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 1.1rem;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--trans);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.btn-bookmark-q:hover {
+  border-color: var(--yellow);
+  background: var(--yellow-bg);
+  transform: scale(1.1);
+}
+
+.btn-bookmark-q.bookmarked {
+  border-color: var(--yellow);
+  background: var(--yellow-bg);
+  box-shadow: 0 0 10px rgba(255,224,51,0.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   HOME QUICK ROW — Bookmarks + Analytics side by side
+   ══════════════════════════════════════════════════════════ */
+
+.home-quick-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.btn-bookmark-home {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+  border: 2px solid rgba(255,224,51,0.3);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: var(--trans);
+  font-family: 'Nunito', sans-serif;
+}
+
+.btn-bookmark-home:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 0 14px rgba(255,224,51,0.2);
+  transform: translateY(-1px);
+}
+
+.btn-analytics-home {
+  background: var(--lime-bg);
+  color: var(--lime);
+  border: 2px solid rgba(57,255,138,0.3);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: var(--trans);
+  font-family: 'Nunito', sans-serif;
+}
+
+.btn-analytics-home:hover {
+  border-color: var(--lime);
+  box-shadow: 0 0 14px rgba(57,255,138,0.2);
+  transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════════════════════════════
+   BOOKMARK SCREEN — items
+   ══════════════════════════════════════════════════════════ */
+
+.bookmark-item {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: slideUp 0.18s ease;
+  transition: var(--trans);
+}
+
+.bookmark-item:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 0 10px rgba(255,224,51,0.1);
+}
+
+.bookmark-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bookmark-topic-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: var(--yellow-bg);
+  border: 1px solid rgba(255,224,51,0.3);
+  color: var(--yellow);
+  border-radius: 20px;
+  padding: 3px 10px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-remove-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: var(--trans);
+  flex-shrink: 0;
+}
+
+.bookmark-remove-btn:hover {
+  color: var(--red);
+  background: var(--red-bg);
+}
+
+.bookmark-item-q {
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.bookmark-item-ans {
+  font-size: 0.75rem;
+  color: var(--lime);
+  font-weight: 700;
+}
+
+/* mode indicator for bookmark mode */
+.mode-indicator.bookmark {
+  background: var(--yellow-bg);
+  border: 1.5px solid rgba(255,224,51,0.35);
+  color: var(--yellow);
+}
+
+/* ══════════════════════════════════════════════════════════
+   ANALYTICS SCREEN
+   ══════════════════════════════════════════════════════════ */
+
+.analytics-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.analytics-summary-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 10px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.analytics-summary-box::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--grad-lime);
+}
+
+.analytics-summary-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--lime);
+  display: block;
+}
+
+.analytics-summary-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+  margin-top: 4px;
+}
+
+.analytics-rank-card {
+  background: var(--surface);
+  border: 2px solid rgba(162,89,255,0.3);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 0 20px rgba(162,89,255,0.1);
+}
+
+.analytics-rank-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analytics-rank-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.analytics-rank-label,
+.analytics-xp-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.analytics-rank-val {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.analytics-xp-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--grad-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Topic accuracy rows */
+.analytics-topic-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.analytics-topic-row.unattempted {
+  opacity: 0.5;
+}
+
+.analytics-topic-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analytics-topic-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.analytics-topic-pct {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.analytics-bar-track {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.analytics-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 6px rgba(255,255,255,0.15);
+}
+
+.analytics-topic-meta {
+  font-size: 0.67rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.analytics-unattempted-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.worst-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  background: var(--red-bg);
+  border: 1px solid rgba(255,79,163,0.3);
+  color: var(--red);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.best-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  background: var(--lime-bg);
+  border: 1px solid rgba(57,255,138,0.3);
+  color: var(--lime);
+  border-radius: 20px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
