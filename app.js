@@ -33,11 +33,31 @@ let activeSubject = 'maths';   // 'maths' | 'reasoning'
 
 // ── Per-subject storage key helpers ───────────────────────
 function sKey(base) { return 'quiz_' + activeSubject + '_' + base; }
-const WEAK_KEY    = () => sKey('weak_stats');
-const BANK_KEY    = () => sKey('question_bank');
-const META_KEY    = () => sKey('bank_meta');
-const GITHUB_KEY  = () => sKey('github_url');
-const HISTORY_KEY = () => sKey('session_history');
+const WEAK_KEY      = () => sKey('weak_stats');
+const BANK_KEY      = () => sKey('question_bank');
+const META_KEY      = () => sKey('bank_meta');
+const GITHUB_KEY    = () => sKey('github_url');
+const HISTORY_KEY   = () => sKey('session_history');
+const BOOKMARK_KEY  = () => sKey('bookmarks');
+
+// XP is global across both subjects (one player profile)
+const XP_KEY        = 'quiz_xp_total';
+
+// ── XP / Gamification config ───────────────────────────────
+const XP_PER_CORRECT  = 10;
+const XP_PER_WRONG    = 2;   // participation XP
+const LEVELS = [
+  { level: 1,  title: 'Novice',       xpMin: 0     },
+  { level: 2,  title: 'Apprentice',   xpMin: 100   },
+  { level: 3,  title: 'Scholar',      xpMin: 300   },
+  { level: 4,  title: 'Thinker',      xpMin: 600   },
+  { level: 5,  title: 'Analyst',      xpMin: 1000  },
+  { level: 6,  title: 'Expert',       xpMin: 1500  },
+  { level: 7,  title: 'Strategist',   xpMin: 2200  },
+  { level: 8,  title: 'Master',       xpMin: 3000  },
+  { level: 9,  title: 'Grandmaster',  xpMin: 4200  },
+  { level: 10, title: 'Legend',       xpMin: 6000  },
+];
 
 // ── State ──────────────────────────────────────────────────
 let allQuestions   = [];
@@ -50,6 +70,7 @@ let weakStats      = {};
 let currentMode    = 'normal';   // normal | overall | weaktest | retry
 let selectedTopics = [];
 let currentQ       = null;
+let bookmarks      = {};   // { [questionId]: true }
 
 // Timer state
 let timerMode      = 'none';     // none | countup
@@ -63,6 +84,8 @@ let overallQCount  = 20;
 document.addEventListener('DOMContentLoaded', async () => {
   bindSubjectTabs();
   bindEvents();
+  loadBookmarks();
+  updateXPBar();
   await switchSubject('maths', true);
 
   if ('serviceWorker' in navigator) {
@@ -120,6 +143,7 @@ async function switchSubject(subj, isInit) {
 
   // Load this subject's data
   loadWeakStats();
+  loadBookmarks();
   restoreGithubUrl();
 
   var hasGithubUrls = !!localStorage.getItem(GITHUB_KEY());
@@ -654,6 +678,7 @@ function updateTopicQCount() {
 
 function updateHomeStats() {
   var weakCount      = getWeakQuestions().length;
+  var bmCount        = Object.keys(bookmarks).length;
   var totalAttempted = Object.values(weakStats).reduce(function(s, v) { return s + v.attempts; }, 0);
 
   document.getElementById('stat-total').textContent     = allQuestions.length || '—';
@@ -663,6 +688,9 @@ function updateHomeStats() {
   document.getElementById('btn-weak-mode').disabled = weakCount === 0;
   document.getElementById('btn-weak-test').disabled = weakCount === 0;
   document.getElementById('weak-count-badge').textContent = weakCount > 0 ? weakCount + ' weak' : 'none yet';
+
+  var bmBadge = document.getElementById('bookmark-count-badge');
+  if (bmBadge) bmBadge.textContent = bmCount > 0 ? bmCount + ' saved' : 'none yet';
 
   var exportBtn = document.getElementById('btn-export');
   if (exportBtn) {
@@ -736,7 +764,7 @@ function buildSessionEntry() {
     mode:     currentMode,
     topic:    currentMode === 'normal'
                 ? (selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics')
-                : (currentMode === 'overall' ? 'All Topics' : 'Weak'),
+                : (currentMode === 'overall' ? 'All Topics' : currentMode === 'bookmark' ? 'Bookmarks' : 'Weak'),
     total:    attempted,
     correct:  score,
     wrong:    attempted - score,
@@ -804,6 +832,18 @@ function bindEvents() {
   document.getElementById('btn-weak-mode').addEventListener('click', showWeakList);
   document.getElementById('btn-weak-test').addEventListener('click', function() { startQuiz('weaktest'); });
   document.getElementById('btn-history').addEventListener('click', function() { showHistoryScreen('all'); });
+  document.getElementById('btn-bookmarks').addEventListener('click', showBookmarkScreen);
+  document.getElementById('btn-analytics').addEventListener('click', showAnalyticsScreen);
+
+  // Bookmarks screen
+  document.getElementById('btn-bookmark-home').addEventListener('click', function() { showScreen('home'); });
+  document.getElementById('btn-start-bookmark-quiz').addEventListener('click', startBookmarkQuiz);
+
+  // Analytics screen
+  document.getElementById('btn-analytics-home').addEventListener('click', function() { showScreen('home'); });
+
+  // Bookmark toggle button in quiz
+  document.getElementById('btn-bookmark').addEventListener('click', toggleBookmark);
 
   // Overall Quiz setup
   document.getElementById('btn-overall-setup').addEventListener('click', function() {
@@ -1003,6 +1043,15 @@ function loadQuestion() {
 
   document.getElementById('feedback').style.display = 'none';
   document.getElementById('btn-next').style.display = 'none';
+
+  // Bookmark button state
+  var bmBtn = document.getElementById('btn-bookmark');
+  if (bmBtn) {
+    var isBookmarked = !!bookmarks[currentQ.id];
+    bmBtn.textContent   = isBookmarked ? '🔖' : '🏷️';
+    bmBtn.title         = isBookmarked ? 'Bookmarked' : 'Bookmark this question';
+    bmBtn.classList.toggle('bookmarked', isBookmarked);
+  }
 }
 
 function checkAnswer(selected, clickedBtn) {
@@ -1011,6 +1060,7 @@ function checkAnswer(selected, clickedBtn) {
   var isCorrect = selected === currentQ.correct;
   attempted++;
   updateWeakStats(currentQ.id, isCorrect);
+  awardXP(isCorrect ? XP_PER_CORRECT : XP_PER_WRONG);
 
   if (isCorrect) {
     score++;
@@ -1140,7 +1190,224 @@ function showHistoryScreen(tab) {
 }
 
 // ══════════════════════════════════════════════════════════
-// UTILITIES
+// GAMIFICATION — XP / LEVELS / RANKS
+// ══════════════════════════════════════════════════════════
+
+function getTotalXP() {
+  return parseInt(localStorage.getItem(XP_KEY) || '0', 10);
+}
+
+function awardXP(amount) {
+  var prev = getTotalXP();
+  var next = prev + amount;
+  localStorage.setItem(XP_KEY, next);
+  updateXPBar();
+  // Check level-up
+  var prevInfo = getLevelInfo(prev);
+  var nextInfo = getLevelInfo(next);
+  if (nextInfo.level > prevInfo.level) {
+    showToast('🎉 Level Up! You are now Level ' + nextInfo.level + ' — ' + nextInfo.title + '!');
+  }
+}
+
+function getLevelInfo(xp) {
+  var info = LEVELS[0];
+  for (var i = 0; i < LEVELS.length; i++) {
+    if (xp >= LEVELS[i].xpMin) info = LEVELS[i];
+    else break;
+  }
+  // LEVELS is 0-indexed; info.level is 1-based, so LEVELS[info.level] = next level entry
+  var nextLevelData = info.level < LEVELS.length ? LEVELS[info.level] : null;
+  var xpIntoLevel   = xp - info.xpMin;
+  var xpNeeded      = nextLevelData ? nextLevelData.xpMin - info.xpMin : 0;
+  var pct           = xpNeeded > 0 ? Math.min(100, Math.round((xpIntoLevel / xpNeeded) * 100)) : 100;
+  return { level: info.level, title: info.title, xp: xp, xpIntoLevel: xpIntoLevel, xpNeeded: xpNeeded, pct: pct };
+}
+
+function getRankEmoji(level) {
+  if (level >= 10) return '👑';
+  if (level >= 8)  return '🏆';
+  if (level >= 6)  return '💎';
+  if (level >= 4)  return '🥇';
+  if (level >= 2)  return '🥈';
+  return '🥉';
+}
+
+function updateXPBar() {
+  var xp   = getTotalXP();
+  var info = getLevelInfo(xp);
+  var el   = document.getElementById('xp-bar-wrap');
+  if (!el) return;
+
+  document.getElementById('xp-level-badge').textContent  = 'Lv.' + info.level;
+  document.getElementById('xp-rank-title').textContent   = getRankEmoji(info.level) + ' ' + info.title;
+  document.getElementById('xp-bar-fill').style.width     = info.pct + '%';
+  document.getElementById('xp-bar-label').textContent    = info.xp + ' XP';
+}
+
+// ══════════════════════════════════════════════════════════
+// BOOKMARKS
+// ══════════════════════════════════════════════════════════
+
+function loadBookmarks() {
+  try { bookmarks = JSON.parse(localStorage.getItem(BOOKMARK_KEY())) || {}; } catch { bookmarks = {}; }
+}
+
+function saveBookmarks() {
+  localStorage.setItem(BOOKMARK_KEY(), JSON.stringify(bookmarks));
+}
+
+function toggleBookmark() {
+  if (!currentQ) return;
+  if (bookmarks[currentQ.id]) {
+    delete bookmarks[currentQ.id];
+    showToast('Bookmark removed.');
+  } else {
+    bookmarks[currentQ.id] = { id: currentQ.id, topic: currentQ.topic, question: currentQ.question, options: currentQ.options, correct: currentQ.correct, savedAt: Date.now() };
+    showToast('🔖 Bookmarked!');
+  }
+  saveBookmarks();
+  var bmBtn = document.getElementById('btn-bookmark');
+  if (bmBtn) {
+    var isBookmarked = !!bookmarks[currentQ.id];
+    bmBtn.textContent = isBookmarked ? '🔖' : '🏷️';
+    bmBtn.classList.toggle('bookmarked', isBookmarked);
+  }
+  updateHomeStats();
+}
+
+function showBookmarkScreen() {
+  var list       = Object.values(bookmarks);
+  var container  = document.getElementById('bookmark-list');
+
+  document.getElementById('bookmark-count-text').textContent =
+    list.length + ' question' + (list.length !== 1 ? 's' : '') + ' bookmarked';
+
+  if (list.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔖</div><p>No bookmarks yet.<br>Tap 🏷️ during a quiz to save questions.</p></div>';
+  } else {
+    // Sort newest first
+    list.sort(function(a, b) { return (b.savedAt || 0) - (a.savedAt || 0); });
+    container.innerHTML = list.map(function(q) {
+      var qTx = q.question.length > 80 ? q.question.slice(0, 80) + '…' : q.question;
+      return '<div class="bookmark-item" data-id="' + q.id + '">' +
+        '<div class="bookmark-item-top">' +
+          '<span class="bookmark-topic-pill">' + escHtml(q.topic) + '</span>' +
+          '<button class="bookmark-remove-btn" onclick="removeBookmark(\'' + q.id + '\')">✕</button>' +
+        '</div>' +
+        '<div class="bookmark-item-q">' + escHtml(qTx) + '</div>' +
+        '<div class="bookmark-item-ans">✅ <strong>' + escHtml(q.correct) + '</strong></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  document.getElementById('btn-start-bookmark-quiz').disabled = list.length === 0;
+  showScreen('bookmarks');
+}
+
+function removeBookmark(id) {
+  delete bookmarks[id];
+  saveBookmarks();
+  showBookmarkScreen();
+  updateHomeStats();
+}
+
+function startBookmarkQuiz() {
+  var list = Object.values(bookmarks);
+  if (list.length === 0) { showToast('No bookmarks to quiz!'); return; }
+  currentMode  = 'bookmark';
+  score        = 0; attempted = 0; sessionWrong = []; sessionIndex = 0;
+  timerMode    = 'none';
+  sessionQueue = shuffle(list);
+  startTimer();
+  showScreen('quiz');
+  updateModeIndicator();
+  loadQuestion();
+}
+
+// ══════════════════════════════════════════════════════════
+// ANALYTICS SCREEN — Topic Accuracy
+// ══════════════════════════════════════════════════════════
+
+function showAnalyticsScreen() {
+  // Build per-topic stats from weakStats + allQuestions
+  var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+
+  var topicStats = topics.map(function(topic) {
+    var qs = allQuestions.filter(function(q) { return q.topic === topic; });
+    var totalAttempts = 0, totalWrong = 0;
+    qs.forEach(function(q) {
+      var s = weakStats[q.id];
+      if (s) { totalAttempts += s.attempts; totalWrong += s.wrong; }
+    });
+    var correct = totalAttempts - totalWrong;
+    var pct = totalAttempts > 0 ? Math.round((correct / totalAttempts) * 100) : -1;
+    return { topic: topic, attempts: totalAttempts, correct: correct, wrong: totalWrong, pct: pct, qCount: qs.length };
+  });
+
+  // Separate attempted vs not
+  var attempted_topics = topicStats.filter(function(t) { return t.pct >= 0; });
+  var unattempted      = topicStats.filter(function(t) { return t.pct < 0; });
+
+  // Sort attempted: worst first (most improvement needed)
+  attempted_topics.sort(function(a, b) { return a.pct - b.pct; });
+
+  // Overall accuracy
+  var totalA = 0, totalC = 0;
+  attempted_topics.forEach(function(t) { totalA += t.attempts; totalC += t.correct; });
+  var overallPct = totalA > 0 ? Math.round((totalC / totalA) * 100) : 0;
+
+  // XP info
+  var xp   = getTotalXP();
+  var info = getLevelInfo(xp);
+
+  // Render header summary
+  document.getElementById('analytics-overall-pct').textContent  = totalA > 0 ? overallPct + '%' : '—';
+  document.getElementById('analytics-total-attempts').textContent = totalA;
+  document.getElementById('analytics-topics-done').textContent  = attempted_topics.length + ' / ' + topics.length;
+  document.getElementById('analytics-xp-val').textContent       = xp + ' XP';
+  document.getElementById('analytics-rank-val').textContent     = getRankEmoji(info.level) + ' ' + info.title + ' (Lv.' + info.level + ')';
+
+  // Render topic bars
+  var container = document.getElementById('analytics-topic-list');
+  if (attempted_topics.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No attempts yet.<br>Start a quiz to see your topic accuracy.</p></div>';
+  } else {
+    container.innerHTML = attempted_topics.map(function(t, idx) {
+      var barColor = t.pct >= 80 ? 'var(--lime)' : t.pct >= 50 ? 'var(--orange)' : 'var(--pink)';
+      var rankBadge = idx === 0 ? '<span class="worst-badge">Weakest</span>' : (idx === attempted_topics.length - 1 ? '<span class="best-badge">Strongest</span>' : '');
+      return '<div class="analytics-topic-row">' +
+        '<div class="analytics-topic-top">' +
+          '<span class="analytics-topic-name">' + escHtml(t.topic) + '</span>' +
+          rankBadge +
+          '<span class="analytics-topic-pct" style="color:' + barColor + '">' + t.pct + '%</span>' +
+        '</div>' +
+        '<div class="analytics-bar-track">' +
+          '<div class="analytics-bar-fill" style="width:' + t.pct + '%;background:' + barColor + '"></div>' +
+        '</div>' +
+        '<div class="analytics-topic-meta">' + t.correct + ' correct / ' + t.attempts + ' attempts · ' + t.qCount + ' Qs</div>' +
+      '</div>';
+    }).join('');
+
+    if (unattempted.length > 0) {
+      container.innerHTML += '<div class="analytics-unattempted-label">Not yet attempted (' + unattempted.length + ' topics)</div>' +
+        unattempted.map(function(t) {
+          return '<div class="analytics-topic-row unattempted">' +
+            '<div class="analytics-topic-top">' +
+              '<span class="analytics-topic-name">' + escHtml(t.topic) + '</span>' +
+              '<span class="analytics-topic-pct" style="color:var(--muted)">—</span>' +
+            '</div>' +
+            '<div class="analytics-bar-track"><div class="analytics-bar-fill" style="width:0%"></div></div>' +
+            '<div class="analytics-topic-meta">' + t.qCount + ' questions available</div>' +
+          '</div>';
+        }).join('');
+    }
+  }
+
+  showScreen('analytics');
+}
+
+// ══════════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════
 
 function updateModeIndicator() {
@@ -1151,6 +1418,8 @@ function updateModeIndicator() {
     el.textContent = '🔁 Retry Mode'; el.className = 'mode-indicator';
   } else if (currentMode === 'overall') {
     el.textContent = '🌐 Overall Quiz'; el.className = 'mode-indicator overall';
+  } else if (currentMode === 'bookmark') {
+    el.textContent = '🔖 Bookmarks Quiz'; el.className = 'mode-indicator bookmark';
   } else {
     var topicLabel = selectedTopics.length === 0 ? 'No Topic' : selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics';
     el.textContent = '🟡 ' + topicLabel; el.className = 'mode-indicator normal';
