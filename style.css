@@ -1733,6 +1733,292 @@ header {
 @keyframes shake  { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(7px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
 @keyframes slideUp{ from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ══════════════════════════════════════════════════════════
+   RETENTION SCORE CARD (Analytics Screen)
+   ══════════════════════════════════════════════════════════ */
+.retention-card::before {
+  background: var(--grad-lime) !important;
+}
+
+.retention-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.retention-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--white);
+}
+
+.retention-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.retention-bar-track {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.retention-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.retention-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.retention-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.retention-stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retention-stat-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.retention-stat-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.retention-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.retention-hint strong { color: var(--text); }
+
+.retention-empty {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.7;
+  padding: 6px 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   REPORTS BUTTON (Home Screen)
+   ══════════════════════════════════════════════════════════ */
+.btn-reports-home {
+  width: 100%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 14px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: var(--trans);
+  position: relative;
+}
+
+.btn-reports-home:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-bg);
+}
+
+.reports-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 900;
+  border-radius: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  animation: popIn 0.3s ease;
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUTO-REPORTS SCREEN
+   ══════════════════════════════════════════════════════════ */
+.reports-schedule-card::before {
+  background: var(--grad-cyan) !important;
+}
+
+.reports-schedule-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.reports-schedule-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.rsi-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rsi-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rsi-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rsi-date {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.rsi-date strong {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.reports-schedule-hint {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+/* Auto-report list items */
+.auto-report-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.auto-report-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--grad-cyan);
+  opacity: 0.8;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.auto-report-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.auto-report-type {
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.auto-report-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.auto-report-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.auto-report-stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ars-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.ars-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.auto-report-dl-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 canvas {
   background: #ffffff !important;
   border-radius: 12px;
@@ -1743,4 +2029,14 @@ canvas {
   background: #ffffff !important;
   padding: 12px;
   border-radius: 14px;
+}
+
+/* Analytics action row */
+.analytics-action-row {
+  display: flex;
+  gap: 10px;
+}
+.analytics-action-row .btn-reports-home,
+.analytics-action-row .btn-pdf-report {
+  flex: 1;
 }
