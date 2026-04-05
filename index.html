@@ -205,14 +205,6 @@
       </button>
     </div>
 
-    <!-- ── PDF Report Button ── -->
-    <div class="divider"></div>
-    <button class="btn btn-pdf-report" id="btn-pdf-report">
-      <span class="pdf-btn-icon">📄</span>
-      <span class="pdf-btn-text">Export Performance Report</span>
-      <span class="pdf-btn-badge">PDF</span>
-    </button>
-
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
@@ -465,7 +457,65 @@
       <div id="analytics-topic-list" style="display:flex;flex-direction:column;gap:14px"></div>
     </div>
 
+    <!-- Retention Score card -->
+    <div class="home-card retention-card" style="padding:18px">
+      <div id="analytics-retention-card">
+        <div class="retention-empty">Loading retention data…</div>
+      </div>
+    </div>
+
+    <!-- Reports & Export buttons -->
+    <div class="analytics-action-row">
+      <button class="btn btn-reports-home" id="btn-auto-reports" style="flex:1">
+        <span>📋 Reports</span>
+        <span class="reports-unread-badge" id="reports-unread-badge" style="display:none">0</span>
+      </button>
+      <button class="btn btn-pdf-report" id="btn-pdf-report" style="flex:1">
+        <span class="pdf-btn-icon">📄</span>
+        <span class="pdf-btn-text">Export PDF</span>
+        <span class="pdf-btn-badge">PDF</span>
+      </button>
+    </div>
+
     <button class="btn btn-ghost" id="btn-analytics-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- AUTO-REPORTS SCREEN                                   -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-auto-reports" class="screen">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span class="weak-list-title">📋 Auto-Generated Reports</span>
+    </div>
+
+    <!-- Next report schedule info -->
+    <div class="home-card reports-schedule-card">
+      <h2 style="margin-bottom:12px">Report Schedule</h2>
+      <div class="reports-schedule-row">
+        <div class="reports-schedule-item">
+          <span class="rsi-icon">📋</span>
+          <div class="rsi-info">
+            <span class="rsi-label">Weekly Report</span>
+            <span class="rsi-date">Next: <strong id="next-weekly-due">—</strong></span>
+          </div>
+        </div>
+        <div class="reports-schedule-item">
+          <span class="rsi-icon">📅</span>
+          <div class="rsi-info">
+            <span class="rsi-label">Monthly Report</span>
+            <span class="rsi-date">Next: <strong id="next-monthly-due">—</strong></span>
+          </div>
+        </div>
+      </div>
+      <p class="reports-schedule-hint">Reports are auto-saved here every 7 days (weekly) and 30 days (monthly). They capture a full snapshot of your stats at that moment so you can track your progress over time.</p>
+    </div>
+
+    <!-- List of saved reports -->
+    <div id="auto-reports-list" style="display:flex;flex-direction:column;gap:12px"></div>
+
+    <button class="btn btn-ghost" id="btn-auto-reports-home">← Back to Home</button>
 
   </section>
 
