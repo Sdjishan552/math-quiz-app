@@ -41,6 +41,12 @@ const GITHUB_KEY    = () => sKey('github_url');
 const HISTORY_KEY   = () => sKey('session_history');
 const BOOKMARK_KEY  = () => sKey('bookmarks');
 
+// Auto-report storage keys (global, not per-subject)
+const AUTO_REPORTS_KEY    = 'quiz_auto_reports';       // list of saved report snapshots
+const LAST_WEEKLY_KEY     = 'quiz_last_weekly_snap';   // timestamp of last weekly snapshot
+const LAST_MONTHLY_KEY    = 'quiz_last_monthly_snap';  // timestamp of last monthly snapshot
+const UNREAD_REPORTS_KEY  = 'quiz_unread_reports';     // count of unread auto reports
+
 // XP is global across both subjects (one player profile)
 const XP_KEY        = 'quiz_xp_total';
 
@@ -91,6 +97,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadBookmarks();
   updateXPBar();
   await switchSubject('maths', true);
+  checkAndGenerateAutoReports();
+  updateReportsBadge();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
@@ -831,6 +839,12 @@ function bindEvents() {
   document.getElementById('btn-bookmarks').addEventListener('click', showBookmarkScreen);
   document.getElementById('btn-analytics').addEventListener('click', showAnalyticsScreen);
 
+  // Auto-Reports screen
+  var autoRepBtn = document.getElementById('btn-auto-reports');
+  if (autoRepBtn) autoRepBtn.addEventListener('click', showAutoReportsScreen);
+  var autoRepHome = document.getElementById('btn-auto-reports-home');
+  if (autoRepHome) autoRepHome.addEventListener('click', function() { showScreen('home'); });
+
   // Bookmarks screen
   document.getElementById('btn-bookmark-home').addEventListener('click', function() { showScreen('home'); });
   document.getElementById('btn-start-bookmark-quiz').addEventListener('click', startBookmarkQuiz);
@@ -1076,8 +1090,23 @@ function nextQuestion() { loadQuestion(); }
 function updateWeakStats(id, isCorrect) {
   if (!weakStats[id]) weakStats[id] = { attempts: 0, wrong: 0 };
   weakStats[id].attempts++;
-  if (!isCorrect) weakStats[id].wrong++;
-  else if (weakStats[id].wrong > 0) weakStats[id].wrong = Math.max(0, weakStats[id].wrong - 1);
+  if (!isCorrect) {
+    weakStats[id].wrong++;
+    // Retention: mark as a weak question with timestamp if first time wrong
+    if (!weakStats[id].firstWrongAt) {
+      weakStats[id].firstWrongAt = Date.now();
+    }
+    weakStats[id].everWrong = true;
+    // If it was previously corrected but now wrong again, un-mark correction
+    weakStats[id].corrected = false;
+  } else {
+    if (weakStats[id].wrong > 0) weakStats[id].wrong = Math.max(0, weakStats[id].wrong - 1);
+    // Retention: if this question was ever wrong and now answered correctly, mark as corrected
+    if (weakStats[id].everWrong && !weakStats[id].corrected) {
+      weakStats[id].corrected = true;
+      weakStats[id].correctedAt = Date.now();
+    }
+  }
   saveWeakStats();
 }
 
@@ -1089,6 +1118,17 @@ function getWeakQueueSorted() {
   return getWeakQuestions().sort(function(a, b) {
     return (weakStats[b.id] ? weakStats[b.id].wrong : 0) - (weakStats[a.id] ? weakStats[a.id].wrong : 0);
   });
+}
+
+function getRetentionScore(weakData) {
+  // weakData: the weakStats object for a subject
+  var allWeak      = Object.values(weakData).filter(function(s) { return s.everWrong; });
+  var totalWeak    = allWeak.length;
+  if (totalWeak === 0) return { score: null, improved: 0, stillWeak: 0, total: 0 };
+  var improved     = allWeak.filter(function(s) { return s.corrected; }).length;
+  var stillWeak    = totalWeak - improved;
+  var score        = Math.round((improved / totalWeak) * 100);
+  return { score: score, improved: improved, stillWeak: stillWeak, total: totalWeak };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1378,6 +1418,31 @@ function showAnalyticsScreen() {
   }
 
   showScreen('analytics');
+
+  // Render Retention Score card
+  var retention = getRetentionScore(weakStats);
+  var retCard = document.getElementById('analytics-retention-card');
+  if (retCard) {
+    if (retention.score === null) {
+      retCard.innerHTML = '<div class="retention-empty">No weak questions recorded yet. Answer some questions wrong — then correct them — to see your Retention Score.</div>';
+    } else {
+      var rColor = retention.score >= 70 ? 'var(--lime)' : retention.score >= 40 ? 'var(--orange)' : 'var(--pink)';
+      var rLabel = retention.score >= 70 ? '🔥 Great retention!' : retention.score >= 40 ? '⚡ Keep correcting mistakes' : '⚠️ Many uncorrected mistakes';
+      retCard.innerHTML =
+        '<div class="retention-header">' +
+          '<span class="retention-title">🔁 Retention Score</span>' +
+          '<span class="retention-score" style="color:' + rColor + '">' + retention.score + '%</span>' +
+        '</div>' +
+        '<div class="retention-bar-track"><div class="retention-bar-fill" style="width:' + retention.score + '%;background:' + rColor + '"></div></div>' +
+        '<div class="retention-label">' + rLabel + '</div>' +
+        '<div class="retention-breakdown">' +
+          '<div class="retention-stat"><span class="retention-stat-val" style="color:var(--lime)">' + retention.improved + '</span><span class="retention-stat-label">Improved</span></div>' +
+          '<div class="retention-stat"><span class="retention-stat-val" style="color:var(--pink)">' + retention.stillWeak + '</span><span class="retention-stat-label">Still Weak</span></div>' +
+          '<div class="retention-stat"><span class="retention-stat-val" style="color:var(--cyan)">' + retention.total + '</span><span class="retention-stat-label">Total Weak Qs</span></div>' +
+        '</div>' +
+        '<div class="retention-hint">Questions you got wrong at least once: <strong>' + retention.total + '</strong>. Of those, you later answered <strong>' + retention.improved + '</strong> correctly.</div>';
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1425,6 +1490,316 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(function() { t.classList.remove('show'); }, 2800);
+}
+
+// ══════════════════════════════════════════════════════════
+// AUTO-REPORT ENGINE (Weekly & Monthly Snapshots)
+// ══════════════════════════════════════════════════════════
+
+/* Takes a lightweight snapshot of current stats for a subject */
+function takeStatsSnapshot(subject) {
+  var weakKey    = 'quiz_' + subject + '_weak_stats';
+  var historyKey = 'quiz_' + subject + '_session_history';
+
+  var weakData = {};
+  var history  = [];
+  try { weakData = JSON.parse(localStorage.getItem(weakKey)) || {}; }    catch { weakData = {}; }
+  try { history  = JSON.parse(localStorage.getItem(historyKey)) || []; } catch { history  = []; }
+
+  var totalAttempts = 0, totalCorrect = 0;
+  Object.values(weakData).forEach(function(s) {
+    totalAttempts += s.attempts;
+    totalCorrect  += (s.attempts - s.wrong);
+  });
+  var overallAccuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+  var sessions30 = history.filter(function(s) {
+    return Date.now() - new Date(s.date).getTime() < 30 * 24 * 3600 * 1000;
+  });
+  var activeDays = new Set(sessions30.map(function(s) { return new Date(s.date).toDateString(); })).size;
+
+  var retention = getRetentionScore(weakData);
+
+  return {
+    subject:         subject,
+    date:            new Date().toISOString(),
+    totalAttempts:   totalAttempts,
+    totalCorrect:    totalCorrect,
+    overallAccuracy: overallAccuracy,
+    totalSessions:   history.length,
+    activeDays:      activeDays,
+    weakCount:       Object.values(weakData).filter(function(s) { return s.wrong > 0; }).length,
+    retentionScore:  retention.score,
+    retentionData:   retention,
+    xp:              getTotalXP()
+  };
+}
+
+/* Save an auto-generated report snapshot */
+function saveAutoReport(type, snapMaths, snapReasoning) {
+  var reports = [];
+  try { reports = JSON.parse(localStorage.getItem(AUTO_REPORTS_KEY)) || []; } catch { reports = []; }
+
+  var entry = {
+    id:            Date.now(),
+    type:          type,        // 'weekly' | 'monthly'
+    generatedAt:   new Date().toISOString(),
+    snapMaths:     snapMaths,
+    snapReasoning: snapReasoning,
+    read:          false
+  };
+
+  reports.unshift(entry);
+  if (reports.length > 24) reports = reports.slice(0, 24); // keep max 24 (about 6 months of both)
+  localStorage.setItem(AUTO_REPORTS_KEY, JSON.stringify(reports));
+
+  // Increment unread badge
+  var unread = parseInt(localStorage.getItem(UNREAD_REPORTS_KEY) || '0') + 1;
+  localStorage.setItem(UNREAD_REPORTS_KEY, unread);
+  updateReportsBadge();
+}
+
+/* Check if a weekly or monthly report is due and generate it */
+function checkAndGenerateAutoReports() {
+  var now        = Date.now();
+  var oneWeek    = 7  * 24 * 3600 * 1000;
+  var oneMonth   = 30 * 24 * 3600 * 1000;
+
+  var lastWeekly  = parseInt(localStorage.getItem(LAST_WEEKLY_KEY)  || '0');
+  var lastMonthly = parseInt(localStorage.getItem(LAST_MONTHLY_KEY) || '0');
+
+  var weeklyDue  = (now - lastWeekly)  >= oneWeek;
+  var monthlyDue = (now - lastMonthly) >= oneMonth;
+
+  // Also require at least 1 session to have happened
+  var mathsHistory  = [];
+  var reasonHistory = [];
+  try { mathsHistory  = JSON.parse(localStorage.getItem('quiz_maths_session_history'))     || []; } catch {}
+  try { reasonHistory = JSON.parse(localStorage.getItem('quiz_reasoning_session_history')) || []; } catch {}
+  var hasData = mathsHistory.length > 0 || reasonHistory.length > 0;
+
+  if (!hasData) return;
+
+  if (weeklyDue && lastWeekly > 0) {
+    // Only auto-generate if this isn't the very first time (don't generate at first app open)
+    var snapM = takeStatsSnapshot('maths');
+    var snapR = takeStatsSnapshot('reasoning');
+    saveAutoReport('weekly', snapM, snapR);
+    localStorage.setItem(LAST_WEEKLY_KEY, now);
+    showToast('📋 Weekly report auto-generated! Tap "📋 Reports" to view.');
+  } else if (weeklyDue && lastWeekly === 0) {
+    // First time — just set the timestamp, don't generate
+    localStorage.setItem(LAST_WEEKLY_KEY, now);
+  }
+
+  if (monthlyDue && lastMonthly > 0) {
+    var snapM2 = takeStatsSnapshot('maths');
+    var snapR2 = takeStatsSnapshot('reasoning');
+    saveAutoReport('monthly', snapM2, snapR2);
+    localStorage.setItem(LAST_MONTHLY_KEY, now);
+    showToast('📅 Monthly report auto-generated! Tap "📋 Reports" to view.');
+  } else if (monthlyDue && lastMonthly === 0) {
+    localStorage.setItem(LAST_MONTHLY_KEY, now);
+  }
+}
+
+/* Update the badge on the Reports button */
+function updateReportsBadge() {
+  var unread = parseInt(localStorage.getItem(UNREAD_REPORTS_KEY) || '0');
+  var badge  = document.getElementById('reports-unread-badge');
+  if (!badge) return;
+  if (unread > 0) {
+    badge.textContent = unread;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+/* Show the saved auto-reports screen */
+function showAutoReportsScreen() {
+  // Mark all as read
+  localStorage.setItem(UNREAD_REPORTS_KEY, '0');
+  updateReportsBadge();
+
+  var reports = [];
+  try { reports = JSON.parse(localStorage.getItem(AUTO_REPORTS_KEY)) || []; } catch { reports = []; }
+
+  var container = document.getElementById('auto-reports-list');
+  var nextWeekEl  = document.getElementById('next-weekly-due');
+  var nextMonthEl = document.getElementById('next-monthly-due');
+
+  // Show next due dates
+  var now          = Date.now();
+  var lastWeekly   = parseInt(localStorage.getItem(LAST_WEEKLY_KEY)  || '0');
+  var lastMonthly  = parseInt(localStorage.getItem(LAST_MONTHLY_KEY) || '0');
+  var nextWeeklyMs = lastWeekly  > 0 ? lastWeekly  + 7  * 24 * 3600 * 1000 : now + 7  * 24 * 3600 * 1000;
+  var nextMonthMs  = lastMonthly > 0 ? lastMonthly + 30 * 24 * 3600 * 1000 : now + 30 * 24 * 3600 * 1000;
+
+  var fmtDate = function(ms) {
+    return new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  if (nextWeekEl)  nextWeekEl.textContent  = fmtDate(nextWeeklyMs);
+  if (nextMonthEl) nextMonthEl.textContent = fmtDate(nextMonthMs);
+
+  if (reports.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>No auto-reports yet.<br>Reports are generated automatically every 7 days (weekly) and every 30 days (monthly) as long as you have session data.</p></div>';
+  } else {
+    container.innerHTML = reports.map(function(r) {
+      var d       = new Date(r.generatedAt);
+      var dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      var timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      var typeLabel = r.type === 'monthly' ? '📅 Monthly Report' : '📋 Weekly Report';
+      var typeColor = r.type === 'monthly' ? 'var(--cyan)' : 'var(--violet)';
+      var mAcc = r.snapMaths     ? r.snapMaths.overallAccuracy     + '%' : '—';
+      var rAcc = r.snapReasoning ? r.snapReasoning.overallAccuracy + '%' : '—';
+      var mRet = r.snapMaths     && r.snapMaths.retentionScore     != null ? r.snapMaths.retentionScore     + '%' : '—';
+      var rRet = r.snapReasoning && r.snapReasoning.retentionScore != null ? r.snapReasoning.retentionScore + '%' : '—';
+
+      return '<div class="auto-report-item">' +
+        '<div class="auto-report-top">' +
+          '<span class="auto-report-type" style="color:' + typeColor + '">' + typeLabel + '</span>' +
+          '<span class="auto-report-date">' + dateStr + ' · ' + timeStr + '</span>' +
+        '</div>' +
+        '<div class="auto-report-stats">' +
+          '<div class="auto-report-stat"><span class="ars-label">∑ Maths Accuracy</span><span class="ars-val" style="color:var(--violet)">' + mAcc + '</span></div>' +
+          '<div class="auto-report-stat"><span class="ars-label">🧩 Reasoning Accuracy</span><span class="ars-val" style="color:var(--cyan)">' + rAcc + '</span></div>' +
+          '<div class="auto-report-stat"><span class="ars-label">🔁 Maths Retention</span><span class="ars-val" style="color:var(--lime)">' + mRet + '</span></div>' +
+          '<div class="auto-report-stat"><span class="ars-label">🔁 Reasoning Retention</span><span class="ars-val" style="color:var(--lime)">' + rRet + '</span></div>' +
+        '</div>' +
+        '<button class="btn btn-pdf-report auto-report-dl-btn" onclick="downloadSnapshotReport(' + r.id + ')" style="margin-top:10px;font-size:0.82rem;padding:10px 16px">' +
+          '<span class="pdf-btn-icon">📄</span><span class="pdf-btn-text">Download PDF Report</span>' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  showScreen('auto-reports');
+}
+
+/* Download a PDF from a stored snapshot */
+async function downloadSnapshotReport(reportId) {
+  var reports = [];
+  try { reports = JSON.parse(localStorage.getItem(AUTO_REPORTS_KEY)) || []; } catch { reports = []; }
+  var report = reports.find(function(r) { return r.id === reportId; });
+  if (!report) { showToast('Report not found.'); return; }
+
+  showReportLoader(true);
+  try {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js');
+    await buildSnapshotPDF(report);
+  } catch(err) {
+    console.error('Snapshot PDF error:', err);
+    showToast('❌ PDF generation failed.');
+  } finally {
+    showReportLoader(false);
+  }
+}
+
+/* Build a PDF from a stored snapshot (simpler layout — no live charts) */
+async function buildSnapshotPDF(report) {
+  var { jsPDF } = window.jspdf;
+  var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  var pW = doc.internal.pageSize.getWidth();
+  var pH = doc.internal.pageSize.getHeight();
+  var margin = 12, contentW = pW - margin * 2;
+
+  var C = {
+    bg:      [11, 12, 26],
+    surface: [18, 20, 42],
+    surface2:[26, 29, 53],
+    border:  [42, 45, 80],
+    violet:  [162, 89, 255],
+    cyan:    [0, 212, 255],
+    lime:    [57, 255, 138],
+    pink:    [255, 79, 163],
+    orange:  [255, 122, 47],
+    yellow:  [255, 224, 51],
+    text:    [232, 234, 255],
+    muted:   [123, 128, 176],
+    white:   [255, 255, 255]
+  };
+
+  var typeLabel = report.type === 'monthly' ? 'Monthly Auto-Report' : 'Weekly Auto-Report';
+  var genDate   = new Date(report.generatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Background
+  doc.setFillColor(...C.bg);
+  doc.rect(0, 0, pW, pH, 'F');
+
+  // Header gradient bar
+  drawGradientBar(doc, 0, 0, pW, 26, C.violet, C.cyan);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(...C.bg);
+  doc.text('Quiz PWA — ' + typeLabel, margin, 17);
+
+  var y = 34;
+
+  // Date line
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...C.muted);
+  doc.text('Auto-generated on: ' + genDate, margin, y); y += 10;
+
+  // ── Maths snapshot ──
+  if (report.snapMaths) {
+    y = renderSnapshotSubject(doc, '∑ Maths', report.snapMaths, C, margin, contentW, y, pW);
+    y += 8;
+  }
+
+  // ── Reasoning snapshot ──
+  if (report.snapReasoning) {
+    y = renderSnapshotSubject(doc, '🧩 Reasoning', report.snapReasoning, C, margin, contentW, y, pW);
+  }
+
+  // Footer
+  drawFooter(doc, 1, 1, pH, pW, C);
+
+  // Save
+  var slug = report.type + '_' + new Date(report.generatedAt).toISOString().slice(0, 10);
+  doc.save('QuizReport_' + slug + '.pdf');
+}
+
+function renderSnapshotSubject(doc, label, snap, C, margin, contentW, y, pW) {
+  // Section header
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...C.violet);
+  doc.text(label, margin, y); y += 4;
+  doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
+  doc.line(margin, y, margin + contentW, y); y += 6;
+
+  // Stat boxes
+  var boxes = [
+    { label: 'Overall Accuracy', value: snap.overallAccuracy + '%', color: C.lime },
+    { label: 'Total Attempted',  value: '' + snap.totalAttempts,    color: C.cyan },
+    { label: 'Sessions',         value: '' + snap.totalSessions,    color: C.violet },
+    { label: 'Active Days',      value: '' + snap.activeDays,       color: C.orange },
+    { label: 'Weak Questions',   value: '' + snap.weakCount,        color: C.pink },
+    { label: 'Retention Score',  value: snap.retentionScore != null ? snap.retentionScore + '%' : '—', color: C.yellow },
+  ];
+  var bW = (contentW - 10) / 3;
+  var bH = 22;
+  var cols = 3;
+  for (var i = 0; i < boxes.length; i++) {
+    var col = i % cols;
+    var row = Math.floor(i / cols);
+    var bx = margin + col * (bW + 5);
+    var by = y + row * (bH + 4);
+    drawStatBox(doc, bx, by, bW, bH, boxes[i], C);
+  }
+  y += Math.ceil(boxes.length / cols) * (bH + 4) + 4;
+
+  // Retention bar
+  if (snap.retentionScore != null) {
+    var ret = snap.retentionData || {};
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...C.yellow);
+    doc.text('Retention: ' + snap.retentionScore + '% (' + (ret.improved || 0) + ' improved / ' + (ret.stillWeak || 0) + ' still weak)', margin, y);
+    y += 5;
+    drawProgressBar(doc, margin, y, contentW, 5, snap.retentionScore / 100, C.lime, C.surface2);
+    y += 9;
+  }
+
+  return y;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1589,6 +1964,72 @@ function getAnalyticsData(subject) {
   ).size;
   var consistencyScore = Math.min(100, Math.round((activeDays / 30) * 100));
 
+  // Retention score
+  var retention = getRetentionScore(weakData);
+
+  // Score distribution — bucket sessions into accuracy ranges
+  var scoreDistribution = { 'low': 0, 'mid': 0, 'good': 0, 'great': 0 };
+  history.forEach(function(s) {
+    var p = s.pct || 0;
+    if      (p < 40)  scoreDistribution.low++;
+    else if (p < 60)  scoreDistribution.mid++;
+    else if (p < 80)  scoreDistribution.good++;
+    else              scoreDistribution.great++;
+  });
+
+  // Best and worst session (by accuracy %, min 3 questions to be meaningful)
+  var scorableSessions = history.filter(function(s) { return s.total >= 3; });
+  var bestSession  = scorableSessions.length > 0
+    ? scorableSessions.reduce(function(a, b) { return b.pct > a.pct ? b : a; })
+    : null;
+  var worstSession = scorableSessions.length > 0
+    ? scorableSessions.reduce(function(a, b) { return b.pct < a.pct ? b : a; })
+    : null;
+
+  // Top failed individual questions — sort weakData by wrong count descending
+  var topFailedQuestions = Object.entries(weakData)
+    .filter(function(entry) { return entry[1].wrong > 0; })
+    .sort(function(a, b) { return b[1].wrong - a[1].wrong; })
+    .slice(0, 5)
+    .map(function(entry) {
+      var id  = entry[0];
+      var st  = entry[1];
+      var q   = questions.find(function(q) { return String(q.id) === String(id); });
+      return {
+        id:       id,
+        wrong:    st.wrong,
+        attempts: st.attempts,
+        topic:    q ? q.topic    : 'Unknown',
+        text:     q ? q.question : '(Question text not available)',
+        correct:  q ? q.correct  : '—'
+      };
+    });
+
+  // Change from last auto-report snapshot (for "change since last report" in PDF)
+  var lastChange = null;
+  try {
+    var savedReports = JSON.parse(localStorage.getItem(AUTO_REPORTS_KEY)) || [];
+    // Find most recent report that has a snapshot for this subject
+    var prevReport = savedReports.find(function(r) {
+      return r.snapMaths && subject === 'maths' || r.snapReasoning && subject === 'reasoning';
+    });
+    if (prevReport) {
+      var prevSnap = subject === 'maths' ? prevReport.snapMaths : prevReport.snapReasoning;
+      if (prevSnap) {
+        lastChange = {
+          reportType: prevReport.type,
+          reportDate: new Date(prevReport.generatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          accuracyDiff: overallAccuracy - prevSnap.overallAccuracy,
+          attemptsDiff: totalAttempts - prevSnap.totalAttempts,
+          retentionDiff: (retention.score != null && prevSnap.retentionScore != null)
+            ? retention.score - prevSnap.retentionScore : null,
+          weakDiff: Object.values(weakData).filter(function(s){ return s.wrong > 0; }).length
+                    - prevSnap.weakCount,
+        };
+      }
+    }
+  } catch(e) {}
+
   // Smart insights
   var insights = generateInsights({
     overallAccuracy: overallAccuracy,
@@ -1625,6 +2066,12 @@ function getAnalyticsData(subject) {
     insights: insights,
     xp: xp,
     levelInfo: info,
+    retention: retention,
+    lastChange: lastChange,
+    scoreDistribution: scoreDistribution,
+    bestSession: bestSession,
+    worstSession: worstSession,
+    topFailedQuestions: topFailedQuestions,
     reportDate: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
   };
 }
@@ -1776,10 +2223,20 @@ async function createTrendChart(sessionTrend) {
   var ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  var hasData = sessionTrend.length > 0;
 
-  var labels = hasData ? sessionTrend.map(function(s){ return s.label; }) : ['S1','S2','S3','S4','S5'];
-  var values = hasData ? sessionTrend.map(function(s){ return s.pct; })   : [0,0,0,0,0];
+  // Force last 10 sessions (pad with 0 if fewer)
+  var displayTrend = sessionTrend.length > 0 ? sessionTrend : [];
+  if (displayTrend.length < 10) {
+    // Pad with empty entries if less than 10 sessions
+    while (displayTrend.length < 10) {
+      displayTrend.unshift({ label: 'S' + (displayTrend.length + 1), pct: 0 });
+    }
+  }
+  // Take exactly last 10
+  displayTrend = displayTrend.slice(-10);
+
+  var labels = displayTrend.map(function(s, i) { return s.label || 'S' + (i+1); });
+  var values = displayTrend.map(function(s) { return s.pct || 0; });
 
   var chart = new Chart(canvas, {
     plugins: [chartWhiteBgPlugin],
@@ -1914,34 +2371,34 @@ async function buildPDF(data, subject) {
   doc.setFillColor(...C.bg);
   doc.rect(0, 0, pW, pH, 'F');
 
-  // Top gradient bar
-  drawGradientBar(doc, 0, 0, pW, 28, C.violet, C.pink);
+  // Top gradient bar — slimmer for 2-page layout
+  drawGradientBar(doc, 0, 0, pW, 20, C.violet, C.pink);
 
   // Header text
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
+  doc.setFontSize(15);
   doc.setTextColor(...C.white);
-  doc.text('Performance Report', margin, 12);
+  doc.text('Performance Report', margin, 10);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(7.5);
   doc.setTextColor(200, 200, 220);
   var subjectIcon = data.subject === 'maths' ? '∑' : '⬡';
-  doc.text(data.subjectLabel + ' · ' + data.reportDate + ' · Quiz PWA', margin, 20);
+  doc.text(data.subjectLabel + ' · ' + data.reportDate + ' · Quiz PWA', margin, 17);
 
   // Subject badge
   var subjColor = data.subject === 'maths' ? C.violet : C.cyan;
-  drawRoundedRect(doc, pW - 60, 5, 50, 14, 4, subjColor, null);
+  drawRoundedRect(doc, pW - 52, 3, 42, 12, 3, subjColor, null);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(8.5);
   doc.setTextColor(...C.white);
-  doc.text(data.subjectLabel.toUpperCase(), pW - 35, 13.5, { align: 'center' });
+  doc.text(data.subjectLabel.toUpperCase(), pW - 31, 10, { align: 'center' });
 
-  var y = 34;
+  var y = 23;
 
   /* ── Section: Overall Performance ── */
   y = drawSectionTitle(doc, 'Overall Performance', y, C, margin, contentW);
-  y += 2;
+  y += 0;
 
   var statBoxes = [
     { label: 'Total Attempted', value: data.totalAttempts || '0', color: C.cyan },
@@ -1950,9 +2407,9 @@ async function buildPDF(data, subject) {
     { label: 'Wrong',           value: data.totalWrong || '0', color: C.pink },
   ];
 
-  var boxW = (contentW - 6) / 4;
+  var boxW = (contentW - 9) / 4;
   statBoxes.forEach(function(box, i) {
-    var bx = margin + i * (boxW + 2);
+    var bx = margin + i * (boxW + 3);
     drawStatBox(doc, bx, y, boxW, 22, box, C);
   });
   y += 26;
@@ -1964,16 +2421,57 @@ async function buildPDF(data, subject) {
     { label: 'Active Days',  value: data.activeDays + '/30', color: C.cyan },
     { label: 'Consistency',  value: data.consistencyScore + '%', color: data.consistencyScore >= 60 ? C.lime : C.orange },
   ];
-  var tboxW = (contentW - 6) / 4;
+  var tboxW = (contentW - 9) / 4;
   timeBoxes.forEach(function(box, i) {
-    var bx = margin + i * (tboxW + 2);
+    var bx = margin + i * (tboxW + 3);
     drawStatBox(doc, bx, y, tboxW, 22, box, C);
   });
-  y += 28;
+  y += 26;
+
+  /* ── Change Since Last Report ── */
+  if (data.lastChange) {
+    var lc = data.lastChange;
+    var fmtDiff = function(val, suffix, lowerBetter) {
+      if (val === null || val === undefined) return '—';
+      suffix = suffix || '';
+      if (val > 0) return { text: '+' + val + suffix, color: lowerBetter ? C.pink : C.lime };
+      if (val < 0) return { text: '' + val + suffix, color: lowerBetter ? C.lime : C.pink };
+      return { text: '±0' + suffix, color: C.muted };
+    };
+    var accD  = fmtDiff(lc.accuracyDiff, '%', false);
+    var attD  = fmtDiff(lc.attemptsDiff, '', false);
+    var retD  = fmtDiff(lc.retentionDiff, '%', false);
+    var weakD = fmtDiff(lc.weakDiff, '', true);
+
+    drawPanel(doc, margin, y, contentW, 18, C);
+    doc.setFillColor(...C.yellow);
+    doc.roundedRect(margin, y, 3, 18, 1, 1, 'F');
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...C.yellow);
+    doc.text('CHANGE SINCE LAST ' + lc.reportType.toUpperCase() + ' REPORT (' + lc.reportDate + ')', margin + 7, y + 6);
+
+    var changeItems = [
+      { label: 'Accuracy', d: accD },
+      { label: 'Attempts', d: attD },
+      { label: 'Retention', d: retD },
+      { label: 'Weak Qs', d: weakD },
+    ];
+    var ciW = (contentW - 10) / 4;
+    changeItems.forEach(function(ci, i) {
+      var cx = margin + 7 + i * (ciW + 2);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+      if (ci.d && ci.d.color) doc.setTextColor(...ci.d.color);
+      else doc.setTextColor(...C.muted);
+      doc.text(ci.d ? ci.d.text : '—', cx, y + 13);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...C.muted);
+      doc.text(ci.label, cx, y + 17);
+    });
+    y += 21;
+  }
 
   /* ── Donut + Trend Row ── */
-  var donutW = 52, donutH = 52;
-  var trendW  = contentW - donutW - 6, trendH = 52;
+  var donutW = 46, donutH = 44;
+  var trendW  = contentW - donutW - 6, trendH = 44;
 
   // Donut chart panel
   doc.setFillColor(255, 255, 255);
@@ -1982,24 +2480,24 @@ async function buildPDF(data, subject) {
   doc.setLineWidth(0.3);
   doc.roundedRect(margin, y, donutW, donutH + 6, 3, 3, 'S');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.5);
   doc.setTextColor(...C.muted);
-  doc.text('ACCURACY', margin + donutW/2, y + 5, { align: 'center' });
-  doc.addImage(charts.donut, 'JPEG', margin + 4, y + 6, donutW - 8, donutH - 8);
+  doc.text('ACCURACY', margin + donutW/2, y + 4.5, { align: 'center' });
+  doc.addImage(charts.donut, 'JPEG', margin + 3, y + 5, donutW - 6, donutH - 6);
 
   // Accuracy overlay text
   var accPct = data.overallAccuracy || 0;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(...(accPct >= 70 ? C.lime : accPct >= 50 ? C.orange : C.pink));
-  doc.text(accPct + '%', margin + donutW/2, y + donutH/2 + 4, { align: 'center' });
+  doc.text(accPct + '%', margin + donutW/2, y + donutH/2 + 3, { align: 'center' });
 
   // Legend
-  doc.setFontSize(6.5);
+  doc.setFontSize(6);
   doc.setTextColor(...C.lime);
-  doc.text('[C] Correct', margin + 4, y + donutH + 2);
+  doc.text('[C] Correct', margin + 3, y + donutH + 2);
   doc.setTextColor(...C.pink);
-  doc.text('[W] Wrong', margin + 20, y + donutH + 2);
+  doc.text('[W] Wrong', margin + 18, y + donutH + 2);
 
   // Trend chart panel
   var tx = margin + donutW + 6;
@@ -2009,25 +2507,36 @@ async function buildPDF(data, subject) {
   doc.setLineWidth(0.3);
   doc.roundedRect(tx, y, trendW, trendH + 6, 3, 3, 'S');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.5);
   doc.setTextColor(...C.muted);
-  doc.text('LAST ' + Math.max(data.sessionTrend.length, 5) + ' SESSIONS — ACCURACY TREND', tx + 4, y + 5);
-  doc.addImage(charts.trend, 'JPEG', tx + 2, y + 7, trendW - 4, trendH - 6);
+  doc.text('LAST 10 SESSIONS — ACCURACY TREND', tx + 4, y + 4.5);
+  doc.addImage(charts.trend, 'JPEG', tx + 2, y + 6, trendW - 4, trendH - 4);
 
-  y += donutH + 14;
+  y += donutH + 12;
 
-  /* ── Topic Performance Bar Chart ── */
-  y = drawSectionTitle(doc, 'Topic-wise Performance', y, C, margin, contentW);
-  y += 2;
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(margin, y, contentW, 58, 3, 3, 'F');
-  doc.setDrawColor(220, 220, 220);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(margin, y, contentW, 58, 3, 3, 'S');
-  doc.addImage(charts.bar, 'JPEG', margin + 2, y + 2, contentW - 4, 54);
-  y += 62;
+  /* ── Topic Performance Bar Chart ── (3/4th of remaining space) */
+y = drawSectionTitle(doc, 'Topic-wise Performance', y, C, margin, contentW);
+y += 1;
+
+// Calculate remaining height on page 1 before footer
+const footerY = 287;                    // safe footer start
+const availableHeight = footerY - y - 12; 
+
+// Make it 3/4th of the available space (with minimum 50)
+const chartHeight = Math.max(50, Math.floor(availableHeight * 0.75));
+
+doc.setFillColor(255, 255, 255);
+doc.roundedRect(margin, y, contentW, chartHeight, 3, 3, 'F');
+doc.setDrawColor(220, 220, 220);
+doc.setLineWidth(0.3);
+doc.roundedRect(margin, y, contentW, chartHeight, 3, 3, 'S');
+
+// Stretch chart image to 3/4th height
+doc.addImage(charts.bar, 'JPEG', margin + 2, y + 2, contentW - 4, chartHeight - 4);
+
+y += chartHeight + 8;   // decent gap before footer
   /* ── Quick Topic Legend ── */
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   var legendItems = [
     { label: '>=80% = Strong', color: C.lime },
     { label: '50-79% = Average', color: C.orange },
@@ -2048,68 +2557,56 @@ async function buildPDF(data, subject) {
   doc.setFillColor(...C.bg);
   doc.rect(0, 0, pW, pH, 'F');
 
-  // Page 2 header strip
-  drawGradientBar(doc, 0, 0, pW, 20, C.cyan, C.violet);
+  // Page 2 header strip — slimmer
+  drawGradientBar(doc, 0, 0, pW, 16, C.cyan, C.violet);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(11);
   doc.setTextColor(...C.white);
-  doc.text('Deep Analysis', margin, 13);
+  doc.text('Deep Analysis & Session Insights', margin, 11);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setTextColor(200, 200, 230);
-  doc.text(data.subjectLabel + ' · ' + data.reportDate, pW - margin, 13, { align: 'right' });
+  doc.text(data.subjectLabel + ' · ' + data.reportDate, pW - margin, 11, { align: 'right' });
 
-  y = 26;
+  y = 20;
 
   /* ── Weak Areas + Speed Analysis Row ── */
   var colW = (contentW - 6) / 2;
 
   // Left: Weak Areas
+  var weakTitleY = y;
   y = drawSectionTitle(doc, 'Top Weak Areas', y, C, margin, colW);
-  drawPanel(doc, margin, y + 2, colW, 58, C);
+  drawPanel(doc, margin, y, colW, 48, C);
 
   if (data.weakTopics.length === 0) {
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(...C.muted);
-    doc.text('No weak areas found — great job!', margin + 4, y + 18);
+    doc.text('No weak areas found — great job!', margin + 4, y + 14);
   } else {
     data.weakTopics.slice(0,5).forEach(function(t, i) {
-      var ty = y + 8 + i * 10;
-      var barMax = colW - 16;
+      var ty = y + 6 + i * 8.5;
+      var barMax = colW - 18;
       var barLen = Math.max(4, (t.pct / 100) * barMax);
-
-      // Bar bg
-      doc.setFillColor(...C.surface2);
-      doc.roundedRect(margin + 4, ty + 3, barMax, 5, 1, 1, 'F');
-
-      // Bar fill
-      doc.setFillColor(...C.pink);
-      doc.roundedRect(margin + 4, ty + 3, barLen, 5, 1, 1, 'F');
-
-      // Topic name
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...C.text);
-      var topicLabel = t.topic.length > 18 ? t.topic.slice(0,17)+'…' : t.topic;
+      // label
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C.text);
+      var topicLabel = t.topic.length > 20 ? t.topic.slice(0,19)+'…' : t.topic;
       doc.text(topicLabel, margin + 4, ty + 1.5);
-
-      // Pct
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...C.pink);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...C.pink);
       doc.text(t.pct + '%', margin + colW - 4, ty + 1.5, { align: 'right' });
+      // bar
+      doc.setFillColor(230, 232, 245);
+      doc.roundedRect(margin + 4, ty + 3.5, barMax, 3, 1, 1, 'F');
+      doc.setFillColor(...C.pink);
+      doc.roundedRect(margin + 4, ty + 3.5, barLen, 3, 1, 1, 'F');
     });
   }
 
-  // Right: Speed Analysis
+  // Right: Speed Analysis — use drawSectionTitle for consistency
   var rx = margin + colW + 6;
-  var ry = y; // align with weak section title area
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...C.cyan);
-  doc.text('Speed Analysis', rx, ry);
-  drawPanel(doc, rx, ry + 2, colW, 58, C);
+  var savedY = y;
+  var speedTitleEndY = drawSectionTitle(doc, 'Speed Analysis', weakTitleY, C, rx, colW);
+  drawPanel(doc, rx, speedTitleEndY, colW, 48, C);
 
   var speedItems = [
     { label: 'Avg Time / Question', value: data.avgTimePerQ ? data.avgTimePerQ + 's' : '—' },
@@ -2118,95 +2615,211 @@ async function buildPDF(data, subject) {
     { label: 'Total Sessions',      value: data.history.length + '' },
   ];
   speedItems.forEach(function(item, i) {
-    var sy = ry + 11 + i * 12;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...C.muted);
+    var sy = speedTitleEndY + 8 + i * 10;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C.muted);
     doc.text(item.label, rx + 4, sy);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...C.cyan);
-    doc.text(item.value, rx + colW - 4, sy + 4, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...C.cyan);
+    doc.text(item.value, rx + colW - 4, sy + 5, { align: 'right' });
   });
 
-  y += 68;
+  y += 55;
 
   /* ── Consistency + XP Row ── */
   var csW = (contentW - 6) / 2;
+  var csTitleY = y;
 
-  // Consistency
-y = drawSectionTitle(doc, 'Consistency Score', y, C, margin, csW);  drawPanel(doc, margin, y + 2, csW, 36, C);
+  y = drawSectionTitle(doc, 'Consistency Score', y, C, margin, csW);
+  drawPanel(doc, margin, y, csW, 26, C);
 
   var cScore = data.consistencyScore;
   var cColor = cScore >= 70 ? C.lime : cScore >= 40 ? C.orange : C.pink;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(...cColor);
-  doc.text(cScore + '%', margin + csW / 2, y + 22, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...C.muted);
-  doc.text(data.activeDays + ' active days in last 30', margin + csW/2, y + 32, { align: 'center' });
-
-  // Consistency bar
-  drawProgressBar(doc, margin + 4, y + 34, csW - 8, 4, cScore / 100, cColor, C.surface2);
-
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...cColor);
+  doc.text(cScore + '%', margin + csW / 2, y + 14, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...C.muted);
+  doc.text(data.activeDays + ' active days in last 30', margin + csW/2, y + 21, { align: 'center' });
+  drawProgressBar(doc, margin + 5, y + 22.5, csW - 10, 2.5, cScore / 100, cColor, [225, 227, 240]);
   // XP & Rank
   var xpX = margin + csW + 6;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...C.yellow);
-  doc.text('XP & Rank', xpX, y);
-  drawPanel(doc, xpX, y + 2, csW, 36, C);
+  var xpTitleEndY = drawSectionTitle(doc, 'XP & Rank', csTitleY, C, xpX, csW);
+  drawPanel(doc, xpX, xpTitleEndY, csW, 26, C);
 
   var info = data.levelInfo;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...C.yellow);
-doc.text('Lv.' + info.level, xpX + csW/2, y + 15, { align: 'center' });  doc.setFontSize(9);
-  doc.setTextColor(...C.orange);
-  doc.text(info.title, xpX + csW/2, y + 22, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...C.muted);
-  doc.text(info.xp + ' XP · ' + info.xpIntoLevel + '/' + (info.xpNeeded || '∞') + ' to next level', xpX + csW/2, y + 30, { align: 'center' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...C.yellow);
+  doc.text('Lv.' + info.level, xpX + csW/2, xpTitleEndY + 12, { align: 'center' });
+  doc.setFontSize(7.5); doc.setTextColor(...C.orange);
+  doc.text(info.title, xpX + csW/2, xpTitleEndY + 18, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...C.muted);
+  doc.text(info.xp + ' XP  ·  ' + info.xpIntoLevel + '/' + (info.xpNeeded || '∞') + ' to next', xpX + csW/2, xpTitleEndY + 21, { align: 'center' });
+  
+  // Fixed progress bar position - moved slightly up to sit nicely inside the box
+  drawProgressBar(doc, xpX + 5, xpTitleEndY + 22.5, csW - 10, 2.5, info.pct / 100, C.yellow, [225, 227, 240]);
 
-  // XP progress bar
-  drawProgressBar(doc, xpX + 4, y + 34, csW - 8, 4, info.pct / 100, C.yellow, C.surface2);
+  y += 35;
 
-  y += 46;
+  /* ── Smart Insights (compact, max 3) ── */
+  y = drawSectionTitle(doc, 'Smart Insights', y, C, margin, contentW);
 
-  /* ── Smart Insights ── */
-y = drawSectionTitle(doc, 'Smart Insights', y, C, margin, contentW);  y += 2;
-
-  var insightColors = {
-    green:   C.lime,
-    blue:    C.cyan,
-    orange:  C.orange,
-    red:     C.pink,
-    neutral: C.muted
-  };
-
-  var iPerRow = 1;
-  data.insights.forEach(function(ins, i) {
-    if (y > pH - 50) return; // safety
+  var insightColors = { green: C.lime, blue: C.cyan, orange: C.orange, red: C.pink, neutral: C.muted };
+  data.insights.slice(0, 3).forEach(function(ins) {
+    if (y > pH - 95) return;
     var iColor = insightColors[ins.color] || C.cyan;
-
-    drawPanel(doc, margin, y, contentW, 18, C);
-
-    // Color accent bar
+    drawPanel(doc, margin, y, contentW, 13, C);
     doc.setFillColor(...iColor);
-    doc.roundedRect(margin, y, 3, 18, 1, 1, 'F');
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...C.text);
-    var lines = doc.splitTextToSize(ins.text, contentW - 14);
-    var textY = lines.length === 1 ? y + 11.5 : y + 8;
-    doc.text(lines.slice(0,2), margin + 8, textY);
-
-    y += 22;
+    doc.roundedRect(margin, y, 3, 13, 1, 1, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...C.text);
+    var lines = doc.splitTextToSize(ins.text, contentW - 12);
+    doc.text(lines[0], margin + 7, y + 8.5);
+    y += 16;
   });
+
+  /* ── Retention Score (compact) ── */
+  if (y < pH - 65) {
+    y += 2;
+    y = drawSectionTitle(doc, 'Retention Score', y, C, margin, contentW);
+
+    var ret = data.retention;
+    if (ret && ret.score !== null) {
+      drawPanel(doc, margin, y, contentW, 22, C);
+      doc.setFillColor(...C.lime);
+      doc.roundedRect(margin, y, 3, 22, 1, 1, 'F');
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+      doc.setTextColor(...(ret.score >= 70 ? C.lime : ret.score >= 40 ? C.orange : C.pink));
+      doc.text(ret.score + '%', margin + 8, y + 10);
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
+      doc.setTextColor(...C.muted);
+      var retDesc = ret.score >= 70 ? 'Excellent! You are correcting most mistakes.' : ret.score >= 40 ? 'Good effort. Keep revisiting weak questions.' : 'Many mistakes still uncorrected. Practice more.';
+      doc.text(retDesc, margin + 38, y + 8, { maxWidth: contentW - 80 });
+
+      var miniBoxes = [
+        { label: 'Improved', value: '' + ret.improved, color: C.lime },
+        { label: 'Still Weak', value: '' + ret.stillWeak, color: C.pink },
+        { label: 'Total Weak', value: '' + ret.total, color: C.cyan },
+      ];
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      var bW3 = (contentW - 10) / 3;
+      miniBoxes.forEach(function(b, i) {
+        var bx = margin + 38 + i * 38;
+        doc.setTextColor(...b.color);
+        doc.text(b.value, bx, y + 16);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...C.muted);
+        doc.text(b.label, bx, y + 20);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      });
+      y += 26;
+    } else {
+      drawPanel(doc, margin, y, contentW, 11, C);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C.muted);
+      doc.text('No weak questions recorded yet.', margin + 5, y + 7.5);
+      y += 14;
+    }
+  }
+
+  /* ── Weak Question Deep Dive (compact) ── */
+  if (data.topFailedQuestions && data.topFailedQuestions.length > 0 && y < pH - 55) {
+    y += 2;
+    y = drawSectionTitle(doc, 'Weak Question Deep Dive  —  Top ' + Math.min(3, data.topFailedQuestions.length) + ' Most Failed', y, C, margin, contentW);
+
+    data.topFailedQuestions.slice(0, 3).forEach(function(q, i) {
+      if (y > pH - 48) return;
+      var rowH = 15;
+      drawPanel(doc, margin, y, contentW, rowH, C);
+      // Rank badge
+      doc.setFillColor(...C.pink);
+      doc.roundedRect(margin, y, 9, rowH, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(255, 255, 255);
+      doc.text('#' + (i + 1), margin + 4.5, y + rowH / 2 + 2.5, { align: 'center' });
+      // Wrong count pill
+      var pillX = margin + contentW - 28;
+      doc.setFillColor(...C.pink);
+      doc.roundedRect(pillX, y + 3, 26, 9, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(5.5); doc.setTextColor(255, 255, 255);
+      doc.text(q.wrong + 'x wrong / ' + q.attempts + ' tried', pillX + 13, y + 8.5, { align: 'center' });
+      // Topic pill
+      var topicTxt = q.topic.length > 12 ? q.topic.slice(0, 11) + '…' : q.topic;
+      doc.setFillColor(225, 227, 245);
+      doc.roundedRect(margin + 11, y + 3, 28, 5, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(5); doc.setTextColor(...C.cyan);
+      doc.text(topicTxt.toUpperCase(), margin + 25, y + 6.5, { align: 'center' });
+      // Question text
+      var maxQW = pillX - margin - 44;
+      var qText = q.text.length > 95 ? q.text.slice(0, 93) + '…' : q.text;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C.text);
+      doc.text(doc.splitTextToSize(qText, maxQW)[0], margin + 41, y + 7);
+      // Answer
+      var ansText = 'Ans: ' + (q.correct.length > 36 ? q.correct.slice(0, 35) + '…' : q.correct);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.setTextColor(...C.lime);
+      doc.text(ansText, margin + 41, y + 12.5);
+      y += rowH + 2;
+    });
+  }
+
+  /* ── Score Distribution + Best/Worst Session ── */
+  if (y < pH - 48) {
+    y += 3;
+    var halfW = (contentW - 6) / 2;
+    var distTitleY = y;
+
+    // LEFT: Score Distribution
+    var distBodyY = drawSectionTitle(doc, 'Score Distribution', distTitleY, C, margin, halfW);
+    drawPanel(doc, margin, distBodyY, halfW, 38, C);
+
+    var distBuckets = [
+      { label: '0–39%',   key: 'low',   color: C.pink   },
+      { label: '40–59%',  key: 'mid',   color: C.orange  },
+      { label: '60–79%',  key: 'good',  color: C.cyan    },
+      { label: '80–100%', key: 'great', color: C.lime    },
+    ];
+    var maxBucket = Math.max(1, Math.max.apply(null, distBuckets.map(function(b) { return data.scoreDistribution[b.key]; })));
+    distBuckets.forEach(function(b, i) {
+      var count  = data.scoreDistribution[b.key];
+      var barLen = Math.round((halfW - 36) * (count / maxBucket));
+      var by     = distBodyY + 5 + i * 8;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C.muted);
+      doc.text(b.label, margin + 4, by + 3.5);
+      doc.setFillColor(225, 227, 240);
+      doc.roundedRect(margin + 24, by, halfW - 34, 5, 1, 1, 'F');
+      if (count > 0) { doc.setFillColor(...b.color); doc.roundedRect(margin + 24, by, Math.max(4, barLen), 5, 1, 1, 'F'); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...b.color);
+      doc.text('' + count, margin + halfW - 4, by + 3.5, { align: 'right' });
+    });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...C.muted);
+    doc.text('Total: ' + data.history.length + ' sessions', margin + 4, distBodyY + 35);
+
+    // RIGHT: Best & Worst — titles aligned with left column
+    var rx2 = margin + halfW + 6;
+    var bwBodyY = drawSectionTitle(doc, 'Best & Worst Session', distTitleY, C, rx2, halfW);
+    drawPanel(doc, rx2, bwBodyY, halfW, 38, C);
+
+    var fmtSess = function(s) {
+      if (!s) return { score: '—', date: '—', topic: '—' };
+      var d = new Date(s.date);
+      return {
+        score: s.pct + '%  (' + s.correct + '/' + s.total + ')',
+        date:  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        topic: (s.topic || '—').length > 22 ? (s.topic || '—').slice(0, 21) + '…' : (s.topic || '—')
+      };
+    };
+    var best  = fmtSess(data.bestSession);
+    var worst = fmtSess(data.worstSession);
+    [
+      { label: 'BEST',  data: best,  color: C.lime },
+      { label: 'WORST', data: worst, color: C.pink },
+    ].forEach(function(item, i) {
+      var iy = bwBodyY + 4 + i * 16;
+      doc.setFillColor(243, 244, 251);
+      doc.roundedRect(rx2 + 3, iy, halfW - 6, 13, 2, 2, 'F');
+      doc.setFillColor(...item.color);
+      doc.roundedRect(rx2 + 3, iy, 3, 13, 1, 1, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...item.color);
+      doc.text(item.label, rx2 + 8, iy + 5);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...item.color);
+      doc.text(item.data.score, rx2 + halfW - 5, iy + 5, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(...C.muted);
+      doc.text(item.data.date + '  ·  ' + item.data.topic, rx2 + 8, iy + 10);
+    });
+  }
 
   // Footer p2
   drawFooter(doc, 2, 2, pH, pW, C);
@@ -2313,7 +2926,7 @@ async function renderSubjectPage(doc, data, charts, C, pW, pH, margin, contentW,
   doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.3);
   doc.roundedRect(tx, y, tW, 52, 3, 3, 'S');
   doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...C.muted);
-  doc.text('SESSION TREND', tx+4, y+5);
+  doc.text('LAST 10 SESSIONS — ACCURACY TREND', tx+4, y+5);
   doc.addImage(charts.trend, 'JPEG', tx+2, y+7, tW-4, 42);
   y += 56;
 
@@ -2456,23 +3069,26 @@ var lines = doc.splitTextToSize(ins.text, contentW-12);    doc.text(lines.slice(
 /* ── PDF DRAWING HELPERS ── */
 
 function drawGradientBar(doc, x, y, w, h, colorA, colorB) {
-  var steps = 30;
+  var steps = 50;   // smoother gradient
   for (var i = 0; i < steps; i++) {
     var t = i / steps;
     var r = Math.round(colorA[0] + t * (colorB[0] - colorA[0]));
     var g = Math.round(colorA[1] + t * (colorB[1] - colorA[1]));
     var b = Math.round(colorA[2] + t * (colorB[2] - colorA[2]));
     doc.setFillColor(r, g, b);
-    doc.rect(x + (i / steps) * w, y, w / steps + 0.5, h, 'F');
+    doc.rect(x + (i / steps) * w, y, (w / steps) + 1, h, 'F');
   }
 }
 
 function drawPanel(doc, x, y, w, h, C) {
-  doc.setFillColor(...C.surface);
-  doc.roundedRect(x, y, w, h, 3, 3, 'F');
-  doc.setDrawColor(...C.border);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(x, y, w, h, 3, 3, 'S');
+  // Softer, more professional white panel with gentle rounded corners
+  doc.setFillColor(249, 250, 253);
+  doc.roundedRect(x, y, w, h, 6, 6, 'F');     // increased radius = softer look
+
+  // Very subtle light border (less harsh than before)
+  doc.setDrawColor(215, 218, 232);
+  doc.setLineWidth(0.15);                     // thinner line
+  doc.roundedRect(x, y, w, h, 6, 6, 'S');
 }
 
 function drawRoundedRect(doc, x, y, w, h, r, fillColor, strokeColor) {
@@ -2481,25 +3097,31 @@ function drawRoundedRect(doc, x, y, w, h, r, fillColor, strokeColor) {
 }
 
 function drawStatBox(doc, x, y, w, h, box, C) {
-  doc.setFillColor(...C.surface2);
-  doc.roundedRect(x, y, w, h, 3, 3, 'F');
+  // Softer card look with bigger radius
+  doc.setFillColor(250, 251, 254);
+  doc.roundedRect(x, y, w, h, 5, 5, 'F');     // increased radius
+
+  // Subtle border
   doc.setDrawColor(...C.border);
-  doc.setLineWidth(0.2);
-  doc.roundedRect(x, y, w, h, 3, 3, 'S');
+  doc.setLineWidth(0.18);
+  doc.roundedRect(x, y, w, h, 5, 5, 'S');
 
-  // Top accent line
+  // Top accent bar — keep color but make it softer
   doc.setFillColor(...box.color);
-  doc.roundedRect(x, y, w, 2, 1, 1, 'F');
+  doc.roundedRect(x + 3, y, w - 6, 3.5, 2, 2, 'F');   // small rounded top bar
 
+  // Value text
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(...box.color);
-  doc.text(String(box.value), x + w/2, y + 12, { align: 'center' });
+  doc.text(String(box.value), x + w / 2, y + h * 0.56, { align: 'center' });
 
+  // Label text
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
+  doc.setFontSize(5.8);
   doc.setTextColor(...C.muted);
-  doc.text(box.label, x + w/2, y + 18, { align: 'center' });
+  var labelLines = doc.splitTextToSize(box.label, w - 6);
+  doc.text(labelLines[0], x + w / 2, y + h * 0.82, { align: 'center' });
 }
 
 function drawProgressBar(doc, x, y, w, h, pct, fillColor, bgColor) {
@@ -2512,25 +3134,33 @@ function drawProgressBar(doc, x, y, w, h, pct, fillColor, bgColor) {
 }
 
 function drawSectionTitle(doc, title, y, C, margin, contentW) {
+  // Left accent dot
+  doc.setFillColor(...C.violet);
+  doc.roundedRect(margin, y - 0.5, 3, 6, 1, 1, 'F');
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(...C.violet);
-  doc.text(title, margin, y);
+  doc.text(title.toUpperCase(), margin + 5, y + 4.5);
 
-  doc.setDrawColor(...C.border);
-  doc.setLineWidth(0.3);
-  doc.line(margin, y + 2, margin + contentW, y + 2);
+  // Full-width divider line — make it softer
+  doc.setDrawColor(220, 222, 235);
+  doc.setLineWidth(0.2);
+  doc.line(margin, y + 7, margin + contentW, y + 7);
 
-  return y + 5;
+  return y + 10;
 }
 
 function drawFooter(doc, pageNum, totalPages, pH, pW, C) {
-  var footerY = pH - 8;
-  doc.setFillColor(...C.surface2);
-  doc.rect(0, footerY - 3, pW, 11, 'F');
+  var footerY = pH - 10;
+  // Clean separator line
+  doc.setDrawColor(210, 213, 228);
+  doc.setLineWidth(0.3);
+  doc.line(12, footerY, pW - 12, footerY);
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.setTextColor(...C.muted);
-  doc.text('Generated by Quiz PWA · Adaptive Practice Engine', 12, footerY + 2);
-  doc.text('Page ' + pageNum + ' of ' + totalPages, pW - 12, footerY + 2, { align: 'right' });
+  doc.text('Quiz PWA  ·  Adaptive Practice Engine', 12, footerY + 5);
+  doc.text('Page ' + pageNum + ' of ' + totalPages, pW - 12, footerY + 5, { align: 'right' });
 }
