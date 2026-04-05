@@ -238,13 +238,14 @@ async function loadFromGithub() {
     if (!Array.isArray(raw)) throw new Error('JSON must be an array of question objects');
 
     var valid = 0, skipped = 0;
-    var newQuestions = [];
+    var newQuestions = [], skippedIds = [];
     raw.forEach(function(item, idx) {
-      var q = validateQuestion(item, idx);
-      if (q) { newQuestions.push(q); valid++; } else skipped++;
+      var r = validateQuestion(item, idx);
+      if (r.ok) { newQuestions.push(r.q); valid++; }
+      else { skipped++; skippedIds.push(String(r.id) + ' (' + r.reason + ')'); }
     });
 
-    if (newQuestions.length === 0) throw new Error('No valid questions found (' + skipped + ' invalid entries)');
+    if (newQuestions.length === 0) throw new Error('No valid questions found (' + skipped + ' invalid entries)' + (skippedIds.length ? ': ' + skippedIds.slice(0,5).join(', ') : ''));
 
     var prevLen = allQuestions.length;
     var merged  = mergeQuestions(allQuestions, newQuestions);
@@ -259,7 +260,10 @@ async function loadFromGithub() {
     populateTopics(); updateHomeStats(); updateBankUI('github'); updateSetupHint();
 
     var detail = [];
-    if (skipped > 0)   detail.push(skipped + ' invalid entries skipped');
+    if (skipped > 0) {
+      detail.push(skipped + ' invalid entries skipped');
+      if (skippedIds.length) detail.push('Skipped IDs: ' + skippedIds.slice(0, 10).join(', ') + (skippedIds.length > 10 ? '… (+' + (skippedIds.length - 10) + ' more)' : ''));
+    }
     if (added < valid) detail.push((valid - added) + ' duplicates skipped');
     detail.push('URL saved — next visit will remember it');
 
@@ -323,7 +327,7 @@ async function fetchAndMergeGithubUrl(rawUrl) {
     var raw = await response.json();
     if (!Array.isArray(raw)) throw new Error('Not an array');
     var newQuestions = [];
-    raw.forEach(function(item, idx) { var q = validateQuestion(item, idx); if (q) newQuestions.push(q); });
+    raw.forEach(function(item, idx) { var r = validateQuestion(item, idx); if (r.ok) newQuestions.push(r.q); });
     var prevLen  = allQuestions.length;
     allQuestions = mergeQuestions(allQuestions, newQuestions);
     return allQuestions.length - prevLen;
@@ -340,10 +344,67 @@ function handleFileUpload(files) {
   var dropLabel = document.getElementById('drop-zone').querySelector('.drop-label');
   dropLabel.textContent = 'Reading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '...';
 
+  // If single file, check if it's a full backup first
+  if (files.length === 1) {
+    var singleFile = files[0];
+    if (singleFile.name.toLowerCase().endsWith('.json')) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var raw;
+        try { raw = JSON.parse(e.target.result); } catch {
+          resetDropZone();
+          showUploadResult('error', 'Invalid JSON syntax in ' + singleFile.name);
+          return;
+        }
+        // Detect full backup by its _type marker
+        if (raw && raw._type === 'quizpwa_full_backup') {
+          resetDropZone();
+          restoreFullBackup(raw);
+        } else {
+          // Normal question-array file — run through existing logic
+          if (!Array.isArray(raw)) {
+            resetDropZone();
+            showUploadResult('error', 'JSON must be an array of questions (or a full backup file)');
+            return;
+          }
+          var valid = 0, skipped = 0, questions = [], skippedIds = [];
+          raw.forEach(function(item, idx) {
+            var r = validateQuestion(item, idx);
+            if (r.ok) { questions.push(r.q); valid++; }
+            else { skipped++; skippedIds.push(String(r.id) + ' (' + r.reason + ')'); }
+          });
+          if (questions.length === 0) {
+            resetDropZone();
+            showUploadResult('error', 'No valid questions found in ' + singleFile.name,
+              skippedIds.length ? 'Skipped IDs: ' + skippedIds.slice(0, 10).join(', ') : '');
+            return;
+          }
+          var prevLen = allQuestions.length;
+          var merged  = mergeQuestions(allQuestions, questions);
+          var added   = merged.length - prevLen;
+          allQuestions = merged;
+          saveToLocalStorage(merged, { files: 1, total: merged.length, source: 'uploaded' });
+          populateTopics(); updateHomeStats(); updateBankUI('uploaded'); resetDropZone(); updateSetupHint();
+          var detailParts = [];
+          if (added < valid) detailParts.push((valid - added) + ' duplicates removed');
+          if (skipped > 0) {
+            detailParts.push(skipped + ' invalid questions skipped');
+            if (skippedIds.length) detailParts.push('Skipped IDs: ' + skippedIds.slice(0, 10).join(', ') + (skippedIds.length > 10 ? '… (+' + (skippedIds.length - 10) + ' more)' : ''));
+          }
+          showUploadResult('success', 'Loaded ' + added + ' questions from ' + singleFile.name, detailParts.join(' · '));
+        }
+      };
+      reader.onerror = function() { resetDropZone(); showUploadResult('error', 'FileReader error'); };
+      reader.readAsText(singleFile);
+      return;
+    }
+  }
+
+  // Multiple files — treat as question arrays only
   var fileArray = Array.from(files);
   Promise.allSettled(fileArray.map(readFileAsJSON)).then(function(results) {
     var totalValid = 0, totalSkipped = 0, filesOk = 0, filesFailed = 0;
-    var details = [], newQuestions = [];
+    var details = [], newQuestions = [], allSkippedIds = [];
 
     results.forEach(function(result, i) {
       var fname = fileArray[i].name;
@@ -354,6 +415,7 @@ function handleFileUpload(files) {
       var v = result.value;
       filesOk++; totalValid += v.valid; totalSkipped += v.skipped;
       newQuestions.push.apply(newQuestions, v.questions);
+      if (v.skippedIds && v.skippedIds.length) allSkippedIds.push.apply(allSkippedIds, v.skippedIds);
       details.push('OK ' + fname + ': ' + v.valid + ' valid' + (v.skipped > 0 ? ', ' + v.skipped + ' skipped' : ''));
     });
 
@@ -374,14 +436,52 @@ function handleFileUpload(files) {
     var type = filesFailed > 0 ? 'partial' : 'success';
     var headline = filesFailed > 0
       ? 'Loaded ' + added + ' new questions (' + filesFailed + ' file' + (filesFailed > 1 ? 's' : '') + ' failed)'
-      : 'Loaded ' + totalValid + ' questions from ' + filesOk + ' file' + (filesOk > 1 ? 's' : '');
+      : 'Loaded ' + added + ' questions from ' + filesOk + ' file' + (filesOk > 1 ? 's' : '');
 
     var detailParts = [];
     if (added < totalValid) detailParts.push((totalValid - added) + ' duplicates removed');
-    if (totalSkipped > 0)   detailParts.push(totalSkipped + ' invalid questions skipped');
+    if (totalSkipped > 0) {
+      detailParts.push(totalSkipped + ' invalid questions skipped');
+      if (allSkippedIds.length) detailParts.push('Skipped IDs: ' + allSkippedIds.slice(0, 10).join(', ') + (allSkippedIds.length > 10 ? '… (+' + (allSkippedIds.length - 10) + ' more)' : ''));
+    }
     detailParts.push.apply(detailParts, details);
     showUploadResult(type, headline, detailParts.join(' · '));
   });
+}
+
+function restoreFullBackup(snapshot) {
+  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks'];
+  var subjects    = ['maths', 'reasoning'];
+  var restored    = 0;
+
+  subjects.forEach(function(subj) {
+    var subjData = snapshot.perSubject && snapshot.perSubject[subj];
+    if (!subjData) return;
+    subjectKeys.forEach(function(base) {
+      if (subjData[base] !== undefined) {
+        var k = 'quiz_' + subj + '_' + base;
+        localStorage.setItem(k, JSON.stringify(subjData[base]));
+        restored++;
+      }
+    });
+  });
+
+  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY];
+  if (snapshot.global) {
+    globalKeys.forEach(function(k) {
+      if (snapshot.global[k] !== undefined) {
+        localStorage.setItem(k, JSON.stringify(snapshot.global[k]));
+        restored++;
+      }
+    });
+  }
+
+  // Reload the current subject from freshly restored storage
+  switchSubject(activeSubject, false);
+  updateXPBar();
+  updateReportsBadge();
+  showUploadResult('success', '✅ Full backup restored!', 'All statistics, questions and history for both subjects have been restored from ' + snapshot._date);
+  showToast('✅ Full backup restored from ' + snapshot._date);
 }
 
 function readFileAsJSON(file) {
@@ -393,12 +493,13 @@ function readFileAsJSON(file) {
       try { raw = JSON.parse(e.target.result); } catch { reject('Invalid JSON syntax'); return; }
       if (!Array.isArray(raw)) { reject('JSON must be an array'); return; }
       var valid = 0, skipped = 0;
-      var questions = [];
+      var questions = [], skippedIds = [];
       raw.forEach(function(item, idx) {
-        var q = validateQuestion(item, idx);
-        if (q) { questions.push(q); valid++; } else skipped++;
+        var r = validateQuestion(item, idx);
+        if (r.ok) { questions.push(r.q); valid++; }
+        else { skipped++; skippedIds.push(String(r.id) + ' (' + r.reason + ')'); }
       });
-      resolve({ questions: questions, valid: valid, skipped: skipped });
+      resolve({ questions: questions, valid: valid, skipped: skipped, skippedIds: skippedIds });
     };
     reader.onerror = function() { reject('FileReader error'); };
     reader.readAsText(file);
@@ -406,17 +507,22 @@ function readFileAsJSON(file) {
 }
 
 function validateQuestion(item, idx) {
-  if (typeof item !== 'object' || item === null) return null;
+  if (typeof item !== 'object' || item === null)
+    return { ok: false, id: idx, reason: 'not an object' };
   var question = String(item.question || '').trim();
-  if (!question) return null;
-  if (!Array.isArray(item.options) || (item.options.length !== 4 && item.options.length !== 5)) return null;
+  if (!question)
+    return { ok: false, id: item.id != null ? item.id : idx, reason: 'missing question text' };
+  if (!Array.isArray(item.options) || (item.options.length !== 4 && item.options.length !== 5))
+    return { ok: false, id: item.id != null ? item.id : idx, reason: 'options must be array of 4 or 5' };
   var options = item.options.map(function(o) { return String(o || '').trim(); });
-  if (options.some(function(o) { return o === ''; })) return null;
+  if (options.some(function(o) { return o === ''; }))
+    return { ok: false, id: item.id != null ? item.id : idx, reason: 'one or more options is empty' };
   var correct = String(item.correct || '').trim();
-  if (!correct || !options.includes(correct)) return null;
+  if (!correct || !options.includes(correct))
+    return { ok: false, id: item.id != null ? item.id : idx, reason: 'correct answer missing or not in options' };
   var topic = String(item.topic || 'General').trim();
   var id    = item.id != null ? item.id : stableHash(question);
-  return { id: id, question: question, options: options, correct: correct, topic: topic };
+  return { ok: true, q: { id: id, question: question, options: options, correct: correct, topic: topic } };
 }
 
 function mergeQuestions(existing, incoming) {
@@ -461,57 +567,173 @@ function loadFromLocalStorage() {
 
 var clearConfirmStep  = 0;
 var clearConfirmTimer = null;
+var clearMode         = null;  // 'questions' | 'all'
 
 function clearQuestionBank() {
-  clearConfirmStep++;
-  clearTimeout(clearConfirmTimer);
-  clearConfirmTimer = setTimeout(function() { clearConfirmStep = 0; updateClearBtnLabel(); }, 8000);
-
-  if (clearConfirmStep === 1) {
-    updateClearBtnLabel();
-    showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL ' + allQuestions.length + ' questions. Tap 3 more times to confirm.');
+  // First tap always shows the choice modal
+  if (clearConfirmStep === 0) {
+    showClearChoiceModal();
     return;
   }
-  if (clearConfirmStep === 2) {
+  // Subsequent taps: run the multi-step confirm for the chosen mode
+  _doClearConfirmStep();
+}
+
+function showClearChoiceModal() {
+  var existing = document.getElementById('clear-choice-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'clear-choice-modal';
+  modal.style.cssText = [
+    'position:fixed','inset:0','z-index:9999',
+    'background:rgba(0,0,0,0.7)','display:flex',
+    'align-items:center','justify-content:center','padding:20px'
+  ].join(';');
+
+  modal.innerHTML = [
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;',
+    'padding:28px 24px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.5)">',
+    '<div style="font-size:1.1rem;font-weight:700;color:var(--red);margin-bottom:6px">🗑 Clear Data</div>',
+    '<div style="font-size:0.82rem;color:var(--muted);margin-bottom:22px">What do you want to delete?</div>',
+
+    '<button id="clr-questions-btn" style="width:100%;padding:14px 16px;margin-bottom:12px;',
+    'background:var(--surface2);border:1px solid var(--border);border-radius:12px;',
+    'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
+    '<div style="font-size:1rem;margin-bottom:3px">📚 Questions Only</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete question bank for current subject (' + activeSubject + ') — stats are kept</div>',
+    '</button>',
+
+    '<button id="clr-all-btn" style="width:100%;padding:14px 16px;margin-bottom:20px;',
+    'background:var(--surface2);border:1px solid var(--red);border-radius:12px;',
+    'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
+    '<div style="font-size:1rem;margin-bottom:3px">💀 All App Data</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete EVERYTHING — questions, stats, history, XP for both subjects. Cannot be undone.</div>',
+    '</button>',
+
+    '<button id="clr-cancel-btn" style="width:100%;padding:10px;',
+    'background:transparent;border:1px solid var(--border);border-radius:10px;',
+    'color:var(--muted);font-size:0.85rem;cursor:pointer">Cancel</button>',
+    '</div>'
+  ].join('');
+
+  document.body.appendChild(modal);
+
+  document.getElementById('clr-questions-btn').onclick = function() {
+    modal.remove();
+    clearMode = 'questions';
+    clearConfirmStep = 1;
     updateClearBtnLabel();
-    showUploadResult('partial', '⚠️ Step 2 of 4 — This cannot be undone', 'Tap 2 more times.');
+    showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL ' + allQuestions.length + ' questions for ' + activeSubject + '. Tap 4 more times to confirm.');
+  };
+  document.getElementById('clr-all-btn').onclick = function() {
+    modal.remove();
+    clearMode = 'all';
+    clearConfirmStep = 1;
+    updateClearBtnLabel();
+    showUploadResult('partial', '⚠️ Step 1 of 4 — Delete EVERYTHING?', 'This will wipe all questions, stats, history and XP for BOTH subjects. Tap 4 more times to confirm.');
+  };
+  document.getElementById('clr-cancel-btn').onclick = function() { modal.remove(); };
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+function _doClearConfirmStep() {
+  // Always increment first, then act on the new value
+  clearConfirmStep++;
+
+  clearTimeout(clearConfirmTimer);
+  clearConfirmTimer = setTimeout(function() {
+    clearConfirmStep = 0; clearMode = null; updateClearBtnLabel();
+  }, 8000);
+
+  updateClearBtnLabel();
+
+  if (clearConfirmStep === 2) {
+    showUploadResult('partial', '⚠️ Step 2 of 4 — This cannot be undone', 'Tap 2 more times to confirm.');
     return;
   }
   if (clearConfirmStep === 3) {
-    updateClearBtnLabel();
-    showUploadResult('partial', '🔴 Step 3 of 4 — Last warning!', 'You are about to delete ' + allQuestions.length + ' questions. Tap once more to confirm.');
+    showUploadResult('partial', '⚠️ Step 3 of 4 — Are you really sure?', 'Tap 1 more time to confirm.');
     return;
   }
-  if (clearConfirmStep >= 4) {
-    clearConfirmStep = 0;
+  if (clearConfirmStep === 4) {
+    showUploadResult('partial', '🔴 Step 4 of 4 — FINAL WARNING!', 'Tap once more — this CANNOT be undone.');
+    return;
+  }
+  if (clearConfirmStep >= 5) {
     clearTimeout(clearConfirmTimer);
+    var mode = clearMode;
+    clearConfirmStep = 0; clearMode = null;
     updateClearBtnLabel();
-    localStorage.removeItem(BANK_KEY());
-    localStorage.removeItem(META_KEY());
-    localStorage.removeItem(GITHUB_KEY());
-    allQuestions = [];
-
-    var cfg = SUBJECTS[activeSubject];
-    if (cfg.fallbackJson) {
-      showUploadResult('partial', 'Bank cleared. Reloading built-in questions…');
-      fetch(cfg.fallbackJson).then(function(r) { return r.json(); }).then(function(data) {
-        allQuestions = data; onQuestionsReady('default');
-        showUploadResult('success', '✅ Built-in questions restored (' + data.length + ' questions). GitHub URL also cleared.');
-      }).catch(function() { showUploadResult('error', 'Could not reload built-in questions.'); showScreen('home'); });
+    if (mode === 'questions') {
+      _execClearQuestions();
     } else {
-      showUploadResult('success', '✅ Bank cleared. Upload a JSON file to begin.');
-      onQuestionsReady('default');
+      _execClearAll();
     }
   }
+}
+
+function _execClearQuestions() {
+  localStorage.removeItem(BANK_KEY());
+  localStorage.removeItem(META_KEY());
+  localStorage.removeItem(GITHUB_KEY());
+  allQuestions = [];
+
+  var cfg = SUBJECTS[activeSubject];
+  if (cfg.fallbackJson) {
+    showUploadResult('partial', 'Questions cleared. Reloading built-in questions…');
+    fetch(cfg.fallbackJson).then(function(r) { return r.json(); }).then(function(data) {
+      allQuestions = data; onQuestionsReady('default');
+      showUploadResult('success', '✅ Questions cleared. Built-in questions restored (' + data.length + ' Qs). Stats untouched.');
+    }).catch(function() { showUploadResult('error', 'Could not reload built-in questions.'); showScreen('home'); });
+  } else {
+    showUploadResult('success', '✅ Questions cleared. Stats and history are untouched. Upload a JSON file to begin.');
+    onQuestionsReady('default');
+  }
+}
+
+function _execClearAll() {
+  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks'];
+  var subjects    = ['maths', 'reasoning'];
+  subjects.forEach(function(subj) {
+    subjectKeys.forEach(function(base) {
+      localStorage.removeItem('quiz_' + subj + '_' + base);
+    });
+  });
+  localStorage.removeItem(AUTO_REPORTS_KEY);
+  localStorage.removeItem(LAST_WEEKLY_KEY);
+  localStorage.removeItem(LAST_MONTHLY_KEY);
+  localStorage.removeItem(UNREAD_REPORTS_KEY);
+  localStorage.removeItem(XP_KEY);
+
+  allQuestions = []; weakStats = {}; bookmarks = {};
+  updateXPBar();
+  updateReportsBadge();
+  showUploadResult('success', '✅ All app data cleared. Fresh start — both subjects wiped.');
+  onQuestionsReady('default');
+  showToast('All data cleared. Fresh start!');
 }
 
 function updateClearBtnLabel() {
   var btn = document.getElementById('btn-clear-bank');
   if (!btn) return;
-  var labels = ['🗑 Clear Bank','⚠️ Tap again (1/4)','⚠️ Tap again (2/4)','🔴 Tap again (3/4)','💀 Tap to CONFIRM DELETE (4/4)'];
-  btn.textContent     = labels[Math.min(clearConfirmStep, 4)];
-  btn.style.color       = clearConfirmStep >= 3 ? 'var(--red)' : '';
-  btn.style.borderColor = clearConfirmStep >= 3 ? 'var(--red)' : '';
+  if (clearConfirmStep === 0) {
+    btn.textContent = '🗑 Clear Bank';
+    btn.style.color = ''; btn.style.borderColor = '';
+    return;
+  }
+  var modeLabel = clearMode === 'all' ? 'ALL DATA' : 'Questions';
+  var labels = [
+    '🗑 Clear Bank',
+    '⚠️ Tap again (1/4) — ' + modeLabel,
+    '⚠️ Tap again (2/4) — ' + modeLabel,
+    '⚠️ Tap again (3/4) — ' + modeLabel,
+    '🔴 Tap again (4/4) — ' + modeLabel,
+    '💀 Tap to CONFIRM DELETE'
+  ];
+  btn.textContent     = labels[Math.min(clearConfirmStep, 5)];
+  btn.style.color       = clearConfirmStep >= 4 ? 'var(--red)' : '';
+  btn.style.borderColor = clearConfirmStep >= 4 ? 'var(--red)' : '';
 }
 
 // ── Upload UI helpers ──────────────────────────────────────
@@ -552,7 +774,7 @@ function updateBankUI(source) {
 
   if (exportBtn) {
     exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
-    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
+    exportBtn.textContent   = '⬇ Export / Backup';
   }
   if (refreshBtn) {
     refreshBtn.style.display = hasGithub ? 'flex' : 'none';
@@ -591,19 +813,113 @@ function stableHash(str) {
 
 function exportQuestionBank() {
   if (allQuestions.length === 0) { showToast('No questions to export!'); return; }
+  showExportChoiceModal();
+}
+
+function showExportChoiceModal() {
+  var existing = document.getElementById('export-choice-modal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'export-choice-modal';
+  modal.style.cssText = [
+    'position:fixed','inset:0','z-index:9999',
+    'background:rgba(0,0,0,0.7)','display:flex',
+    'align-items:center','justify-content:center','padding:20px'
+  ].join(';');
+
+  modal.innerHTML = [
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;',
+    'padding:28px 24px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.5)">',
+    '<div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:6px">⬇ Export Data</div>',
+    '<div style="font-size:0.82rem;color:var(--muted);margin-bottom:22px">What do you want to export?</div>',
+
+    '<button id="exp-subject-btn" style="width:100%;padding:14px 16px;margin-bottom:12px;',
+    'background:var(--surface2);border:1px solid var(--border);border-radius:12px;',
+    'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
+    '<div style="font-size:1rem;margin-bottom:3px">📚 Subject Data Only</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions of current subject (' + activeSubject + ') — no stats</div>',
+    '</button>',
+
+    '<button id="exp-all-btn" style="width:100%;padding:14px 16px;margin-bottom:20px;',
+    'background:var(--surface2);border:1px solid var(--violet);border-radius:12px;',
+    'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
+    '<div style="font-size:1rem;margin-bottom:3px">💾 All App Data</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions + all statistics for both subjects — full restore</div>',
+    '</button>',
+
+    '<button id="exp-cancel-btn" style="width:100%;padding:10px;',
+    'background:transparent;border:1px solid var(--border);border-radius:10px;',
+    'color:var(--muted);font-size:0.85rem;cursor:pointer">Cancel</button>',
+    '</div>'
+  ].join('');
+
+  document.body.appendChild(modal);
+
+  document.getElementById('exp-subject-btn').onclick = function() {
+    modal.remove();
+    doExportSubjectData();
+  };
+  document.getElementById('exp-all-btn').onclick = function() {
+    modal.remove();
+    doExportAllData();
+  };
+  document.getElementById('exp-cancel-btn').onclick = function() { modal.remove(); };
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+function doExportSubjectData() {
   var exportData = allQuestions.map(function(q) {
     return { id: q.id, topic: q.topic, question: q.question, options: q.options.slice(), correct: q.correct };
   });
   var json     = JSON.stringify(exportData, null, 2);
   var blob     = new Blob([json], { type: 'application/json' });
   var url      = URL.createObjectURL(blob);
-  var filename = activeSubject + 'quiz-questions-' + exportData.length + '-' + getTodayStr() + '.json';
+  var filename = activeSubject + '-questions-' + exportData.length + '-' + getTodayStr() + '.json';
   var a        = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('✅ Exported ' + exportData.length + ' questions as ' + filename);
-  showUploadResult('success', '✅ Exported ' + exportData.length + ' questions', 'File: ' + filename);
+  showToast('✅ Exported ' + exportData.length + ' questions');
+  showUploadResult('success', '✅ Exported ' + exportData.length + ' questions (' + activeSubject + ')', 'File: ' + filename);
+}
+
+function doExportAllData() {
+  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks'];
+  var subjects    = ['maths', 'reasoning'];
+  var snapshot    = { _type: 'quizpwa_full_backup', _date: getTodayStr(), perSubject: {}, global: {} };
+
+  subjects.forEach(function(subj) {
+    snapshot.perSubject[subj] = {};
+    subjectKeys.forEach(function(base) {
+      var k = 'quiz_' + subj + '_' + base;
+      var v = localStorage.getItem(k);
+      if (v !== null) {
+        try { snapshot.perSubject[subj][base] = JSON.parse(v); }
+        catch { snapshot.perSubject[subj][base] = v; }
+      }
+    });
+  });
+
+  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY];
+  globalKeys.forEach(function(k) {
+    var v = localStorage.getItem(k);
+    if (v !== null) {
+      try { snapshot.global[k] = JSON.parse(v); }
+      catch { snapshot.global[k] = v; }
+    }
+  });
+
+  var json     = JSON.stringify(snapshot, null, 2);
+  var blob     = new Blob([json], { type: 'application/json' });
+  var url      = URL.createObjectURL(blob);
+  var filename = 'quizpwa-full-backup-' + getTodayStr() + '.json';
+  var a        = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ Full backup exported!');
+  showUploadResult('success', '✅ Full app backup exported', 'File: ' + filename + ' · Includes all stats & questions for both subjects');
 }
 
 function getTodayStr() {
@@ -700,7 +1016,7 @@ function updateHomeStats() {
   var exportBtn = document.getElementById('btn-export');
   if (exportBtn) {
     exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
-    exportBtn.textContent   = '⬇ Export All (' + allQuestions.length + ' Qs)';
+    exportBtn.textContent   = '⬇ Export / Backup';
   }
 }
 
