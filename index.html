@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1117" />
+  <meta name="theme-color" content="#0b0c1a" />
   <meta name="description" content="Adaptive MCQ practice with weak question tracking" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -17,9 +17,6 @@
 
   <!-- ── Header ──────────────────────────────────────────── -->
   <header>
-    <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode">
-      <span class="theme-toggle-icon">☀️</span>
-    </button>
     <div class="logo">
       <span class="logo-icon" id="logo-icon">∑</span>
       <span id="logo-text">MathQuiz</span>
@@ -122,7 +119,7 @@
         <input type="file" id="file-input" accept=".json" multiple hidden />
       </div>
 
-      <!-- Upload result (hidden until used) -->
+      <!-- Upload result -->
       <div id="upload-result" class="upload-result" style="display:none"></div>
 
       <!-- Export / Clear row -->
@@ -208,6 +205,14 @@
       </button>
     </div>
 
+    <!-- ── PDF Report Button ── -->
+    <div class="divider"></div>
+    <button class="btn btn-pdf-report" id="btn-pdf-report">
+      <span class="pdf-btn-icon">📄</span>
+      <span class="pdf-btn-text">Export Performance Report</span>
+      <span class="pdf-btn-badge">PDF</span>
+    </button>
+
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
@@ -215,51 +220,39 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <section id="screen-overall-setup" class="screen">
 
+    <div class="setup-header">
+      <button class="btn btn-ghost btn-sm" id="btn-overall-setup-back">← Back</button>
+      <span class="setup-title">🌐 Overall Quiz Setup</span>
+    </div>
+
     <div class="home-card">
-      <h2>🌐 Overall Quiz Setup</h2>
-      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:20px;line-height:1.6">
-        Questions will be randomly picked from <strong>all topics</strong>.
-      </p>
+      <h2>How many questions?</h2>
+      <p class="setup-hint" id="setup-available-hint">0 questions available</p>
 
-      <!-- Question count -->
-      <div class="setup-field">
-        <label class="setup-label">Number of Questions</label>
-        <div class="setup-num-row">
-          <button class="btn btn-ghost btn-sm" id="num-dec">−</button>
-          <input type="number" id="overall-q-count" class="num-input" value="20" min="1" max="500" />
-          <button class="btn btn-ghost btn-sm" id="num-inc">+</button>
-        </div>
-        <p class="setup-hint" id="setup-available-hint">— questions available</p>
-      </div>
-
-      <!-- Timer option -->
-      <div class="setup-field" style="margin-top:22px">
-        <label class="setup-label">Timer Mode</label>
-        <div class="timer-option-row">
-          <label class="timer-option">
-            <input type="radio" name="timer-mode" value="none" checked />
-            <span class="timer-opt-box">
-              <span class="timer-opt-icon">🚫</span>
-              <span class="timer-opt-title">No Timer</span>
-              <span class="timer-opt-sub">Take your time</span>
-            </span>
-          </label>
-          <label class="timer-option">
-            <input type="radio" name="timer-mode" value="countup" />
-            <span class="timer-opt-box">
-              <span class="timer-opt-icon">⏱</span>
-              <span class="timer-opt-title">Count Up</span>
-              <span class="timer-opt-sub">Track time used</span>
-            </span>
-          </label>
-        </div>
+      <div class="number-stepper">
+        <button class="stepper-btn" id="num-dec">−</button>
+        <input type="number" id="overall-q-count" value="20" min="1" class="stepper-input" />
+        <button class="stepper-btn" id="num-inc">+</button>
       </div>
     </div>
 
-    <button class="btn btn-overall" id="btn-start-overall">
-      🎲 Begin Overall Quiz
+    <div class="home-card">
+      <h2>Timer mode</h2>
+      <div class="radio-group">
+        <label class="radio-item">
+          <input type="radio" name="timer-mode" value="none" checked />
+          <span>⏸ No Timer</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" name="timer-mode" value="countup" />
+          <span>⏱ Count Up</span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-start-overall">
+      🎲 Start Overall Quiz
     </button>
-    <button class="btn btn-ghost" id="btn-overall-setup-back">← Back to Home</button>
 
   </section>
 
@@ -268,8 +261,7 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <section id="screen-quiz" class="screen">
 
-    <!-- Subject + Mode indicator row -->
-    <div class="quiz-top-row">
+    <div class="quiz-top-bar">
       <div class="quiz-subject-pill" id="quiz-subject-pill">∑ Maths</div>
       <div id="mode-indicator" class="mode-indicator normal">🟡 Normal Quiz</div>
     </div>
@@ -478,6 +470,110 @@
   </section>
 
 </div><!-- /#app -->
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PDF REPORT MODAL                                      -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="report-modal-overlay" id="report-modal">
+  <div class="report-modal">
+    <!-- Header -->
+    <div class="report-modal-header">
+      <div class="report-modal-title-row">
+        <div class="report-modal-icon">📄</div>
+        <div>
+          <div class="report-modal-title">Export Performance Report</div>
+          <div class="report-modal-sub">Professional PDF · Max 2 pages · A4 format</div>
+        </div>
+      </div>
+      <button class="report-modal-close" id="btn-close-report-modal">✕</button>
+    </div>
+
+    <!-- Body -->
+    <div class="report-modal-body">
+
+      <!-- Subject selection -->
+      <div class="report-field">
+        <label class="report-label">Subject</label>
+        <div class="report-select-wrap">
+          <select id="report-subject-select" class="report-select">
+            <option value="maths">∑ Maths</option>
+            <option value="reasoning">🧩 Reasoning</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Combined toggle -->
+      <div class="report-field report-toggle-field">
+        <div class="report-toggle-info">
+          <span class="report-label">Include Both Subjects</span>
+          <span class="report-toggle-desc">Generates 3-page report with comparison section</span>
+        </div>
+        <label class="report-toggle-switch">
+          <input type="checkbox" id="report-combined-check" />
+          <span class="report-toggle-track">
+            <span class="report-toggle-knob"></span>
+          </span>
+        </label>
+      </div>
+
+      <!-- What's included -->
+      <div class="report-includes">
+        <div class="report-includes-title">What's included</div>
+        <div class="report-includes-grid">
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#a259ff">⬡</span>
+            <span>Donut accuracy chart</span>
+          </div>
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#00d4ff">📈</span>
+            <span>Session trend line</span>
+          </div>
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#ff7a2f">📊</span>
+            <span>Topic bar chart</span>
+          </div>
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#39ff8a">🎯</span>
+            <span>Weak area analysis</span>
+          </div>
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#ff4fa3">⏱</span>
+            <span>Speed & consistency</span>
+          </div>
+          <div class="report-include-item">
+            <span class="rii-icon" style="color:#ffe033">💡</span>
+            <span>Smart AI insights</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer actions -->
+    <div class="report-modal-footer">
+      <button class="btn btn-ghost" id="btn-cancel-report" onclick="closeReportModal()">Cancel</button>
+      <button class="btn btn-generate-report" id="btn-generate-report">
+        <span>⬇ Generate PDF</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PDF LOADING OVERLAY                                   -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="report-loader" id="report-loader" style="display:none">
+  <div class="report-loader-box">
+    <div class="report-loader-spinner"></div>
+    <div class="report-loader-title">Generating Report…</div>
+    <div class="report-loader-steps">
+      <div class="rls rls-1">📊 Collecting analytics data</div>
+      <div class="rls rls-2">📈 Rendering charts</div>
+      <div class="rls rls-3">📄 Building PDF pages</div>
+      <div class="rls rls-4">⬇ Preparing download</div>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
