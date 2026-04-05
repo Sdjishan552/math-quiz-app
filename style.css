@@ -763,6 +763,7 @@ header {
 .number-stepper {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   margin-top: 6px;
 }
@@ -791,7 +792,8 @@ header {
 }
 
 .stepper-input {
-  flex: 1;
+  width: 90px;
+  flex: none;
   background: var(--surface2);
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
