@@ -105,6 +105,10 @@
           <button class="btn btn-github-refresh" id="btn-github-refresh">🔄 Refresh</button>
           <button class="btn btn-ghost btn-sm" id="btn-github-clear">✕ Clear URL</button>
         </div>
+        <div class="github-qr-row">
+          <button class="btn btn-qr-show" id="btn-show-qr">📲 Show QR</button>
+          <button class="btn btn-qr-scan" id="btn-scan-qr">📷 Scan QR</button>
+        </div>
       </div>
 
       <div class="upload-divider">
@@ -522,6 +526,46 @@
 </div><!-- /#app -->
 
 <!-- ══════════════════════════════════════════════════════ -->
+<!-- QR SHARE MODAL                                        -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="qr-modal-overlay" id="qr-modal" style="display:none">
+  <div class="qr-modal">
+    <div class="qr-modal-header">
+      <div class="qr-modal-title">📱 QR Share</div>
+      <button class="qr-modal-close" id="btn-qr-close">✕</button>
+    </div>
+
+    <!-- Show QR panel -->
+    <div id="qr-panel-show" class="qr-panel">
+      <p class="qr-panel-hint">Scan this QR code on your phone inside the app to load the same GitHub URL instantly.</p>
+      <div class="qr-code-box" id="qr-code-box"></div>
+      <div class="qr-url-preview" id="qr-url-preview"></div>
+    </div>
+
+    <!-- Scan QR panel -->
+    <div id="qr-panel-scan" class="qr-panel" style="display:none">
+      <p class="qr-panel-hint">Point your camera at the QR code shown on your PC to auto-load the GitHub URL.</p>
+      <div class="qr-scan-wrap">
+        <video id="qr-video" class="qr-video" autoplay playsinline muted></video>
+        <canvas id="qr-canvas" class="qr-canvas" style="display:none"></canvas>
+        <div class="qr-scan-overlay">
+          <div class="qr-scan-corner tl"></div>
+          <div class="qr-scan-corner tr"></div>
+          <div class="qr-scan-corner bl"></div>
+          <div class="qr-scan-corner br"></div>
+          <div class="qr-scan-line"></div>
+        </div>
+      </div>
+      <div class="qr-scan-status" id="qr-scan-status">📷 Scanning…</div>
+    </div>
+
+    <div class="qr-modal-footer">
+      <button class="btn btn-ghost" id="btn-qr-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
 <!-- PDF REPORT MODAL                                      -->
 <!-- ══════════════════════════════════════════════════════ -->
 <div class="report-modal-overlay" id="report-modal">
@@ -627,6 +671,10 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- QR Code generation (qrcode.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- QR Code scanning (jsQR) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
