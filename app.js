@@ -335,6 +335,170 @@ async function fetchAndMergeGithubUrl(rawUrl) {
 }
 
 // ══════════════════════════════════════════════════════════
+// QR SHARE FEATURE
+// ══════════════════════════════════════════════════════════
+
+var _qrScanInterval   = null;   // rAF/setInterval handle for scan loop
+var _qrStream         = null;   // MediaStream for camera
+
+function openShowQR() {
+  var input = document.getElementById('github-url-input');
+  var url   = input ? input.value.trim() : '';
+  if (!url) {
+    showToast('Paste a GitHub URL first, then press Show QR.');
+    return;
+  }
+
+  // Switch to "show" panel
+  document.getElementById('qr-panel-show').style.display = 'flex';
+  document.getElementById('qr-panel-scan').style.display = 'none';
+
+  // Clear previous QR and regenerate
+  var box = document.getElementById('qr-code-box');
+  box.innerHTML = '';
+  /* global QRCode */
+  new QRCode(box, {
+    text:          url,
+    width:         180,
+    height:        180,
+    colorDark:     '#000000',
+    colorLight:    '#ffffff',
+    correctLevel:  QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('qr-url-preview').textContent = url;
+  document.getElementById('qr-modal').style.display = 'flex';
+}
+
+function openScanQR() {
+  // Switch to "scan" panel
+  document.getElementById('qr-panel-show').style.display = 'none';
+  document.getElementById('qr-panel-scan').style.display = 'flex';
+  document.getElementById('qr-modal').style.display = 'flex';
+
+  setQRScanStatus('📷 Starting camera…', '');
+  startQRCamera();
+}
+
+function closeQRModal() {
+  stopQRCamera();
+  document.getElementById('qr-modal').style.display = 'none';
+  // Clear QR box so it regenerates fresh next time
+  var box = document.getElementById('qr-code-box');
+  if (box) box.innerHTML = '';
+}
+
+function setQRScanStatus(msg, cls) {
+  var el = document.getElementById('qr-scan-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'qr-scan-status' + (cls ? ' ' + cls : '');
+}
+
+function startQRCamera() {
+  // jsQR must be available (loaded from CDN)
+  if (typeof jsQR === 'undefined') {
+    setQRScanStatus('⚠️ QR scanner not loaded. Check internet connection.', 'error');
+    return;
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setQRScanStatus('⚠️ Camera not supported on this device/browser.', 'error');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(function(stream) {
+      _qrStream = stream;
+      var video  = document.getElementById('qr-video');
+      video.srcObject = stream;
+      video.play();
+      setQRScanStatus('📷 Scanning…', '');
+      _runQRScanLoop();
+    })
+    .catch(function(err) {
+      var msg = err.name === 'NotAllowedError'
+        ? '⚠️ Camera permission denied. Allow camera access and try again.'
+        : '⚠️ Could not access camera: ' + err.message;
+      setQRScanStatus(msg, 'error');
+    });
+}
+
+function _runQRScanLoop() {
+  var video   = document.getElementById('qr-video');
+  var canvas  = document.getElementById('qr-canvas');
+  var ctx     = canvas.getContext('2d');
+  var found   = false;
+
+  function tick() {
+    // If modal was closed, stop
+    if (document.getElementById('qr-modal').style.display === 'none') {
+      stopQRCamera();
+      return;
+    }
+    if (found) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      /* global jsQR */
+      var code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+
+      if (code && code.data) {
+        found = true;
+        setQRScanStatus('✅ QR detected! Loading…', 'success');
+        stopQRCamera();
+        _handleScannedQRData(code.data);
+        return;
+      }
+    }
+
+    _qrScanInterval = requestAnimationFrame(tick);
+  }
+
+  _qrScanInterval = requestAnimationFrame(tick);
+}
+
+function stopQRCamera() {
+  if (_qrScanInterval) {
+    cancelAnimationFrame(_qrScanInterval);
+    _qrScanInterval = null;
+  }
+  if (_qrStream) {
+    _qrStream.getTracks().forEach(function(t) { t.stop(); });
+    _qrStream = null;
+  }
+  var video = document.getElementById('qr-video');
+  if (video) { video.srcObject = null; }
+}
+
+function _handleScannedQRData(scannedUrl) {
+  // Basic sanity check — should look like a URL
+  var trimmed = scannedUrl.trim();
+  if (!trimmed.startsWith('http')) {
+    setQRScanStatus('⚠️ QR doesn\'t contain a valid URL.', 'error');
+    setTimeout(function() { startQRCamera(); }, 2000);
+    return;
+  }
+
+  // Close modal
+  closeQRModal();
+
+  // Fill the input and trigger load
+  var input = document.getElementById('github-url-input');
+  if (input) input.value = trimmed;
+
+  showToast('📲 QR scanned! Loading questions…');
+  showUploadResult('partial', '📲 QR scanned! Fetching from GitHub…');
+  loadFromGithub();
+}
+
+// ══════════════════════════════════════════════════════════
 // FILE UPLOAD
 // ══════════════════════════════════════════════════════════
 
@@ -1261,6 +1425,15 @@ function bindEvents() {
   document.getElementById('btn-github-load').addEventListener('click', loadFromGithub);
   document.getElementById('btn-github-refresh').addEventListener('click', refreshFromGithub);
   document.getElementById('btn-github-clear').addEventListener('click', clearGithubUrl);
+
+  // QR Share controls
+  document.getElementById('btn-show-qr').addEventListener('click', openShowQR);
+  document.getElementById('btn-scan-qr').addEventListener('click', openScanQR);
+  document.getElementById('btn-qr-close').addEventListener('click', closeQRModal);
+  document.getElementById('btn-qr-cancel').addEventListener('click', closeQRModal);
+  document.getElementById('qr-modal').addEventListener('click', function(e) {
+    if (e.target === document.getElementById('qr-modal')) closeQRModal();
+  });
 
   // Export questions bank
   document.getElementById('btn-export').addEventListener('click', exportQuestionBank);
