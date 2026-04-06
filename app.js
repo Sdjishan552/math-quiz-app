@@ -338,9 +338,11 @@ async function fetchAndMergeGithubUrl(rawUrl) {
 // QR SHARE FEATURE
 // ══════════════════════════════════════════════════════════
 
-var _qrScanInterval   = null;   // rAF/setInterval handle for scan loop
-var _qrStream         = null;   // MediaStream for camera
+var _qrScanInterval = null;   // setInterval handle for scan loop
+var _qrStream       = null;   // MediaStream from camera
+var _qrFound        = false;  // prevent double-fire
 
+/* ── QR Generation (uses qrcode-generator library → qrcode-gen.js) ── */
 function openShowQR() {
   var input = document.getElementById('github-url-input');
   var url   = input ? input.value.trim() : '';
@@ -349,33 +351,43 @@ function openShowQR() {
     return;
   }
 
-  // Switch to "show" panel
   document.getElementById('qr-panel-show').style.display = 'flex';
   document.getElementById('qr-panel-scan').style.display = 'none';
+  document.getElementById('qr-modal').style.display      = 'flex';
 
-  // Clear previous QR and regenerate
   var box = document.getElementById('qr-code-box');
   box.innerHTML = '';
-  /* global QRCode */
-  new QRCode(box, {
-    text:          url,
-    width:         180,
-    height:        180,
-    colorDark:     '#000000',
-    colorLight:    '#ffffff',
-    correctLevel:  QRCode.CorrectLevel.M
-  });
+
+  try {
+    /* global qrcode */
+    var qr = qrcode(0, 'M');   // type 0 = auto-size, M = medium error correction
+    qr.addData(url);
+    qr.make();
+
+    // Render as a table (qrcode-generator's built-in method)
+    // cellSize=5 gives ~180px for most URLs
+    box.innerHTML = qr.createTableTag(5, 0);
+
+    // Style the table to be clean white/black
+    var tbl = box.querySelector('table');
+    if (tbl) {
+      tbl.style.border = 'none';
+      tbl.style.borderCollapse = 'collapse';
+    }
+  } catch (e) {
+    box.innerHTML = '<div style="color:#ff4fa3;font-size:0.8rem;padding:10px;text-align:center">⚠️ Could not generate QR.<br>URL may be too long.</div>';
+  }
 
   document.getElementById('qr-url-preview').textContent = url;
-  document.getElementById('qr-modal').style.display = 'flex';
 }
 
+/* ── QR Scanning (uses jsQR library → jsQR.js) ── */
 function openScanQR() {
-  // Switch to "scan" panel
   document.getElementById('qr-panel-show').style.display = 'none';
   document.getElementById('qr-panel-scan').style.display = 'flex';
-  document.getElementById('qr-modal').style.display = 'flex';
+  document.getElementById('qr-modal').style.display      = 'flex';
 
+  _qrFound = false;
   setQRScanStatus('📷 Starting camera…', '');
   startQRCamera();
 }
@@ -383,7 +395,6 @@ function openScanQR() {
 function closeQRModal() {
   stopQRCamera();
   document.getElementById('qr-modal').style.display = 'none';
-  // Clear QR box so it regenerates fresh next time
   var box = document.getElementById('qr-code-box');
   if (box) box.innerHTML = '';
 }
@@ -396,77 +407,100 @@ function setQRScanStatus(msg, cls) {
 }
 
 function startQRCamera() {
-  // jsQR must be available (loaded from CDN)
+  /* global jsQR */
   if (typeof jsQR === 'undefined') {
-    setQRScanStatus('⚠️ QR scanner not loaded. Check internet connection.', 'error');
+    setQRScanStatus('⚠️ jsQR library not loaded — try refreshing the page.', 'error');
     return;
   }
-
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setQRScanStatus('⚠️ Camera not supported on this device/browser.', 'error');
+    setQRScanStatus('⚠️ Camera not supported on this browser.', 'error');
     return;
   }
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+  // Try rear camera first, fall back to any camera
+  var constraints = {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
     .then(function(stream) {
       _qrStream = stream;
-      var video  = document.getElementById('qr-video');
+      var video = document.getElementById('qr-video');
       video.srcObject = stream;
-      video.play();
-      setQRScanStatus('📷 Scanning…', '');
-      _runQRScanLoop();
+
+      // Must wait for video to actually be playing before scanning
+      video.onloadedmetadata = function() {
+        video.play().then(function() {
+          setQRScanStatus('📷 Scanning… point at the QR code', '');
+          _startScanLoop();
+        }).catch(function(e) {
+          setQRScanStatus('⚠️ Could not start video: ' + e.message, 'error');
+        });
+      };
     })
     .catch(function(err) {
-      var msg = err.name === 'NotAllowedError'
-        ? '⚠️ Camera permission denied. Allow camera access and try again.'
-        : '⚠️ Could not access camera: ' + err.message;
+      var msg;
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        msg = '⚠️ Camera permission denied. Allow camera and try again.';
+      } else if (err.name === 'NotFoundError') {
+        msg = '⚠️ No camera found on this device.';
+      } else if (err.name === 'NotReadableError') {
+        msg = '⚠️ Camera is in use by another app.';
+      } else {
+        msg = '⚠️ Camera error: ' + (err.message || err.name);
+      }
       setQRScanStatus(msg, 'error');
     });
 }
 
-function _runQRScanLoop() {
-  var video   = document.getElementById('qr-video');
-  var canvas  = document.getElementById('qr-canvas');
-  var ctx     = canvas.getContext('2d');
-  var found   = false;
+function _startScanLoop() {
+  // Use setInterval at ~10fps — more reliable on Android than rAF
+  if (_qrScanInterval) clearInterval(_qrScanInterval);
+  _qrScanInterval = setInterval(_scanFrame, 100);
+}
 
-  function tick() {
-    // If modal was closed, stop
-    if (document.getElementById('qr-modal').style.display === 'none') {
-      stopQRCamera();
-      return;
-    }
-    if (found) return;
+function _scanFrame() {
+  if (_qrFound) return;
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      /* global jsQR */
-      var code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert'
-      });
-
-      if (code && code.data) {
-        found = true;
-        setQRScanStatus('✅ QR detected! Loading…', 'success');
-        stopQRCamera();
-        _handleScannedQRData(code.data);
-        return;
-      }
-    }
-
-    _qrScanInterval = requestAnimationFrame(tick);
+  var modal = document.getElementById('qr-modal');
+  if (!modal || modal.style.display === 'none') {
+    stopQRCamera();
+    return;
   }
 
-  _qrScanInterval = requestAnimationFrame(tick);
+  var video = document.getElementById('qr-video');
+  if (!video || video.readyState < 2) return;   // HAVE_CURRENT_DATA = 2
+
+  var W = video.videoWidth;
+  var H = video.videoHeight;
+  if (W === 0 || H === 0) return;
+
+  var canvas = document.getElementById('qr-canvas');
+  canvas.width  = W;
+  canvas.height = H;
+
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, W, H);
+
+  var imageData = ctx.getImageData(0, 0, W, H);
+  var code = jsQR(imageData.data, W, H, { inversionAttempts: 'attemptBoth' });
+
+  if (code && code.data) {
+    _qrFound = true;
+    setQRScanStatus('✅ QR detected!', 'success');
+    stopQRCamera();
+    setTimeout(function() { _handleScannedQRData(code.data); }, 300);
+  }
 }
 
 function stopQRCamera() {
   if (_qrScanInterval) {
-    cancelAnimationFrame(_qrScanInterval);
+    clearInterval(_qrScanInterval);
     _qrScanInterval = null;
   }
   if (_qrStream) {
@@ -474,22 +508,27 @@ function stopQRCamera() {
     _qrStream = null;
   }
   var video = document.getElementById('qr-video');
-  if (video) { video.srcObject = null; }
+  if (video) {
+    video.onloadedmetadata = null;
+    video.srcObject = null;
+  }
 }
 
 function _handleScannedQRData(scannedUrl) {
-  // Basic sanity check — should look like a URL
-  var trimmed = scannedUrl.trim();
+  var trimmed = (scannedUrl || '').trim();
   if (!trimmed.startsWith('http')) {
-    setQRScanStatus('⚠️ QR doesn\'t contain a valid URL.', 'error');
-    setTimeout(function() { startQRCamera(); }, 2000);
+    _qrFound = false;
+    setQRScanStatus('⚠️ QR doesn\'t contain a valid URL. Try again.', 'error');
+    setTimeout(function() {
+      setQRScanStatus('📷 Scanning…', '');
+      _qrFound = false;
+      startQRCamera();
+    }, 2000);
     return;
   }
 
-  // Close modal
   closeQRModal();
 
-  // Fill the input and trigger load
   var input = document.getElementById('github-url-input');
   if (input) input.value = trimmed;
 
