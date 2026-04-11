@@ -370,7 +370,7 @@ header {
 .multi-select-action-btn:first-child { border-right: 1px solid var(--border); }
 .multi-select-action-btn:hover { background: var(--violet-bg); }
 
-.multi-select-list { max-height: 220px; overflow-y: auto; padding: 4px 0; }
+.multi-select-list { max-height: 220px; overflow-y: auto; overflow-x: hidden; padding: 4px 0; }
 .multi-select-list::-webkit-scrollbar { width: 4px; }
 .multi-select-list::-webkit-scrollbar-track { background: transparent; }
 .multi-select-list::-webkit-scrollbar-thumb { background: var(--violet); border-radius: 2px; }
@@ -2383,58 +2383,88 @@ canvas {
 }
 
 /* ══════════════════════════════════════════════════════════
-   TOPIC DELETE BUTTON
+   TOPIC DELETE BUTTON — fixed column outside scroll
    ══════════════════════════════════════════════════════════ */
+
+/*
+  Layout strategy:
+  - .multi-select-item-row is a flex row: [scrollable label area] [fixed delete btn]
+  - The label side (.multi-select-item) gets overflow-x: auto so long names scroll
+    horizontally WITHIN that cell — the delete button stays pinned to the right edge
+  - Every row is a fixed height (44px) so all trash icons form a perfect column
+*/
+
 .multi-select-item-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  height: 44px;           /* fixed row height — guarantees uniform column */
   gap: 0;
+  border-bottom: 1px solid var(--border);
 }
 
+.multi-select-item-row:last-child {
+  border-bottom: none;
+}
+
+/* The label+checkbox side — scrolls horizontally for long names */
 .multi-select-item-row .multi-select-item {
   flex: 1;
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  min-width: 0;           /* allow shrinking */
+  overflow-x: auto;       /* horizontal scroll for long topic names */
+  overflow-y: hidden;
+  scrollbar-width: none;  /* hide scrollbar — swipe is enough on mobile */
+  -ms-overflow-style: none;
+  height: 44px;
+  padding: 0 14px;        /* vertical padding handled by align-items:center */
+  border-radius: 0;
   border-right: none;
+  border-bottom: none;    /* row handles the border */
 }
 
+.multi-select-item-row .multi-select-item::-webkit-scrollbar {
+  display: none;
+}
+
+/* Delete button — fixed width, never moves */
 .topic-delete-btn {
-  flex-shrink: 0;
-  width: 38px;
-  height: 100%;
-  min-height: 44px;
+  flex: 0 0 40px;         /* fixed 40px, never grows/shrinks */
+  width: 40px;
+  height: 44px;           /* matches row height exactly */
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--surface2);
-  border: 1px solid var(--border);
+  border: none;
   border-left: 1px solid var(--border);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   cursor: pointer;
   transition: var(--trans);
   padding: 0;
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .topic-delete-btn:hover {
   background: var(--pink-bg);
-  border-color: var(--pink);
+  border-left-color: var(--pink);
   color: var(--pink);
 }
 
 .topic-delete-btn.topic-delete-confirm {
   background: var(--orange-bg);
-  border-color: var(--orange);
+  border-left-color: var(--orange);
   color: var(--orange);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.2px;
-  width: 72px;
+  flex: 0 0 68px;
+  width: 68px;
   animation: pulse-confirm 0.5s ease;
 }
 
 @keyframes pulse-confirm {
   0%   { transform: scale(1); }
-  40%  { transform: scale(1.08); }
+  40%  { transform: scale(1.04); }
   100% { transform: scale(1); }
 }
