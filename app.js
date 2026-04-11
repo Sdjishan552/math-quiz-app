@@ -943,6 +943,8 @@ function updateClearBtnLabel() {
 
 function updateBankUI(source) {
   var badge      = document.getElementById('upload-source-badge');
+  var badgeBank  = document.getElementById('upload-source-badge-bank');
+  var statusHome = document.getElementById('bank-status-home');
   var status     = document.getElementById('bank-status');
   var clearBtn   = document.getElementById('btn-clear-bank');
   var refreshBtn = document.getElementById('btn-github-refresh');
@@ -951,29 +953,43 @@ function updateBankUI(source) {
   var hasGithub  = savedGithubUrls.length > 0;
   var meta       = getStoredMeta();
 
-  badge.classList.remove('uploaded', 'github');
+  var badgeText, statusText;
 
   if (source === 'github' && meta) {
-    badge.textContent = 'GITHUB'; badge.classList.add('uploaded', 'github');
-    status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
-    clearBtn.style.display = 'flex';
+    badgeText  = 'GITHUB';
+    statusText = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
+    if (clearBtn) clearBtn.style.display = 'flex';
   } else if (source === 'uploaded' && meta) {
-    badge.textContent = 'CUSTOM'; badge.classList.add('uploaded');
-    status.textContent = allQuestions.length + ' questions from ' + meta.files + ' file' + (meta.files !== 1 ? 's' : '');
-    clearBtn.style.display = 'flex';
+    badgeText  = 'CUSTOM';
+    statusText = allQuestions.length + ' questions from ' + meta.files + ' file' + (meta.files !== 1 ? 's' : '');
+    if (clearBtn) clearBtn.style.display = 'flex';
+  } else if (hasGithub) {
+    badgeText  = 'GITHUB';
+    statusText = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
+    if (clearBtn) clearBtn.style.display = 'flex';
   } else {
-    badge.textContent = hasGithub ? 'GITHUB' : 'DEFAULT';
-    if (hasGithub) {
-      badge.classList.add('uploaded', 'github');
-      status.textContent = allQuestions.length + ' questions · ' + savedGithubUrls.length + ' source' + (savedGithubUrls.length !== 1 ? 's' : '') + ' saved';
-      clearBtn.style.display = 'flex';
-    } else {
-      status.textContent = allQuestions.length > 0
-        ? allQuestions.length + ' built-in questions'
-        : (SUBJECTS[activeSubject].fallbackJson ? 'Using built-in questions' : 'No questions loaded — upload a JSON file');
-      clearBtn.style.display = 'none';
-    }
+    badgeText  = 'DEFAULT';
+    statusText = allQuestions.length > 0
+      ? allQuestions.length + ' built-in questions'
+      : (SUBJECTS[activeSubject].fallbackJson ? 'Using built-in questions' : 'No questions loaded — upload a JSON file');
+    if (clearBtn) clearBtn.style.display = 'none';
   }
+
+  // Update all badge/status elements
+  if (badge) {
+    badge.textContent = badgeText;
+    badge.classList.remove('uploaded', 'github');
+    if (badgeText === 'GITHUB') badge.classList.add('uploaded', 'github');
+    else if (badgeText === 'CUSTOM') badge.classList.add('uploaded');
+  }
+  if (badgeBank) {
+    badgeBank.textContent = badgeText;
+    badgeBank.classList.remove('uploaded', 'github');
+    if (badgeText === 'GITHUB') badgeBank.classList.add('uploaded', 'github');
+    else if (badgeText === 'CUSTOM') badgeBank.classList.add('uploaded');
+  }
+  if (status)     status.textContent     = statusText;
+  if (statusHome) statusHome.textContent = statusText;
 
   if (exportBtn) {
     exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
@@ -1145,16 +1161,23 @@ function populateTopics() {
   var list   = document.getElementById('multi-select-list');
   if (!list) return;
 
+  // Cancel any pending delete when topics refresh
+  clearTimeout(_topicDeleteTimer);
+  _topicDeletePending = null;
+
   selectedTopics = selectedTopics.filter(function(t) { return topics.includes(t); });
 
   list.innerHTML = topics.map(function(t) {
     var checked = selectedTopics.includes(t) ? 'checked' : '';
     var count   = allQuestions.filter(function(q) { return q.topic === t; }).length;
-    return '<label class="multi-select-item">' +
-      '<input type="checkbox" class="topic-checkbox" value="' + escHtml(t) + '" ' + checked + '/>' +
-      '<span class="topic-item-name">' + escHtml(t) + '</span>' +
-      '<span class="topic-item-count">' + count + '</span>' +
-      '</label>';
+    return '<div class="multi-select-item-row">' +
+      '<label class="multi-select-item">' +
+        '<input type="checkbox" class="topic-checkbox" value="' + escHtml(t) + '" ' + checked + '/>' +
+        '<span class="topic-item-name">' + escHtml(t) + '</span>' +
+        '<span class="topic-item-count">' + count + '</span>' +
+      '</label>' +
+      '<button class="topic-delete-btn" data-topic="' + escHtml(t) + '" title="Delete topic">🗑</button>' +
+    '</div>';
   }).join('');
 
   if (topics.length === 0) {
@@ -1170,6 +1193,13 @@ function populateTopics() {
       }
       updateMultiSelectLabel();
       updateTopicQCount();
+    });
+  });
+
+  list.querySelectorAll('.topic-delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      requestDeleteTopic(btn.dataset.topic);
     });
   });
 
@@ -1357,6 +1387,10 @@ function bindEvents() {
   document.getElementById('btn-history').addEventListener('click', function() { showHistoryScreen('all'); });
   document.getElementById('btn-bookmarks').addEventListener('click', showBookmarkScreen);
   document.getElementById('btn-analytics').addEventListener('click', showAnalyticsScreen);
+
+  // Question Bank screen
+  document.getElementById('btn-open-bank').addEventListener('click', function() { showScreen('bank'); });
+  document.getElementById('btn-bank-home').addEventListener('click', function() { showScreen('home'); });
 
   // Auto-Reports screen
   var autoRepBtn = document.getElementById('btn-auto-reports');
@@ -3691,4 +3725,59 @@ function drawFooter(doc, pageNum, totalPages, pH, pW, C) {
   doc.setTextColor(...C.muted);
   doc.text('Quiz PWA  ·  Adaptive Practice Engine', 12, footerY + 5);
   doc.text('Page ' + pageNum + ' of ' + totalPages, pW - 12, footerY + 5, { align: 'right' });
+}
+
+// ══════════════════════════════════════════════════════════
+// TOPIC DELETE (1-tap confirmation)
+// ══════════════════════════════════════════════════════════
+
+var _topicDeletePending = null;   // topic name awaiting confirm
+var _topicDeleteTimer   = null;   // auto-reset timer
+
+function requestDeleteTopic(topic) {
+  // If same topic already pending — second tap = CONFIRM
+  if (_topicDeletePending === topic) {
+    clearTimeout(_topicDeleteTimer);
+    _topicDeletePending = null;
+    _executeDeleteTopic(topic);
+    return;
+  }
+
+  // First tap — set pending and update button label
+  clearTimeout(_topicDeleteTimer);
+  _topicDeletePending = topic;
+  _refreshTopicDeleteButtons();
+
+  // Auto-cancel after 4 s if no second tap
+  _topicDeleteTimer = setTimeout(function() {
+    _topicDeletePending = null;
+    _refreshTopicDeleteButtons();
+  }, 4000);
+}
+
+function _executeDeleteTopic(topic) {
+  var before = allQuestions.length;
+  allQuestions = allQuestions.filter(function(q) { return q.topic !== topic; });
+  selectedTopics = selectedTopics.filter(function(t) { return t !== topic; });
+
+  saveToLocalStorage(allQuestions, { files: 1, total: allQuestions.length, source: getStoredMeta() ? getStoredMeta().source || 'uploaded' : 'uploaded' });
+  populateTopics();
+  updateHomeStats();
+  updateBankUI(getSavedGithubUrls().length > 0 ? 'github' : 'uploaded');
+
+  var removed = before - allQuestions.length;
+  showToast('🗑 Deleted "' + topic + '" — ' + removed + ' question' + (removed !== 1 ? 's' : '') + ' removed.');
+}
+
+function _refreshTopicDeleteButtons() {
+  document.querySelectorAll('.topic-delete-btn').forEach(function(btn) {
+    var t = btn.dataset.topic;
+    if (t === _topicDeletePending) {
+      btn.textContent  = '⚠ Confirm?';
+      btn.classList.add('topic-delete-confirm');
+    } else {
+      btn.textContent  = '🗑';
+      btn.classList.remove('topic-delete-confirm');
+    }
+  });
 }
