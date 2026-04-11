@@ -2259,3 +2259,182 @@ canvas {
   display: flex;
   justify-content: flex-end;
 }
+
+/* ══════════════════════════════════════════════════════════
+   QUESTION BANK HOME BUTTON
+   ══════════════════════════════════════════════════════════ */
+.btn-bank-home {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: var(--trans);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+}
+
+.btn-bank-home::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--grad-cyan);
+  opacity: 0.8;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.btn-bank-home:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(0,212,255,0.12), var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.btn-bank-home-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-bank-home-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.btn-bank-home-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.btn-bank-home-title {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--white);
+  letter-spacing: 0.01em;
+}
+
+.btn-bank-home-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-bank-home-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: var(--trans);
+}
+
+.btn-bank-home-badge.uploaded {
+  background: var(--violet-bg);
+  border-color: var(--violet);
+  color: var(--violet);
+}
+
+.btn-bank-home-badge.github {
+  background: var(--lime-bg);
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+/* ══════════════════════════════════════════════════════════
+   BANK SCREEN HEADER
+   ══════════════════════════════════════════════════════════ */
+.bank-screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bank-screen-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOPIC DELETE BUTTON
+   ══════════════════════════════════════════════════════════ */
+.multi-select-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.multi-select-item-row .multi-select-item {
+  flex: 1;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-right: none;
+}
+
+.topic-delete-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--trans);
+  padding: 0;
+}
+
+.topic-delete-btn:hover {
+  background: var(--pink-bg);
+  border-color: var(--pink);
+  color: var(--pink);
+}
+
+.topic-delete-btn.topic-delete-confirm {
+  background: var(--orange-bg);
+  border-color: var(--orange);
+  color: var(--orange);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  width: 72px;
+  animation: pulse-confirm 0.5s ease;
+}
+
+@keyframes pulse-confirm {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
