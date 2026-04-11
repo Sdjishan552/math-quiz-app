@@ -70,72 +70,17 @@
       </div>
     </div>
 
-    <!-- ── Upload Question Bank ── -->
-    <div class="home-card upload-card" id="upload-card">
-      <div class="upload-header">
-        <div>
-          <h2>Question Bank</h2>
-          <p class="upload-sub" id="bank-status">Using built-in questions</p>
-        </div>
-        <div class="upload-source-badge" id="upload-source-badge">DEFAULT</div>
-      </div>
-
-      <!-- ── GitHub Sync Section ── -->
-      <div class="github-sync-box">
-        <div class="github-sync-label">
-          <span class="github-icon">🐙</span>
-          <span>Load from GitHub</span>
-        </div>
-        <p class="github-sync-hint">
-          Paste the raw GitHub URL and press Load. The URL is saved — press <strong>Refresh</strong> next time to re-sync.
-        </p>
-        <div class="github-input-row">
-          <input
-            type="url"
-            id="github-url-input"
-            class="github-url-input"
-            placeholder="https://raw.githubusercontent.com/you/repo/main/questions.json"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
-          />
-        </div>
-        <div class="github-btn-row">
-          <button class="btn btn-github" id="btn-github-load">⬇ Load from GitHub</button>
-          <button class="btn btn-github-refresh" id="btn-github-refresh">🔄 Refresh</button>
-          <button class="btn btn-ghost btn-sm" id="btn-github-clear">✕ Clear URL</button>
-        </div>
-        <div class="github-qr-row">
-          <button class="btn btn-qr-show" id="btn-show-qr">📲 Show QR</button>
-          <button class="btn btn-qr-scan" id="btn-scan-qr">📷 Scan QR</button>
-        </div>
-      </div>
-
-      <div class="upload-divider">
-        <span>or upload local file</span>
-      </div>
-
-      <!-- Drop zone -->
-      <div class="drop-zone" id="drop-zone">
-        <div class="drop-icon">📥</div>
-        <div class="drop-label">Drop JSON files here</div>
-        <div class="drop-hint">or tap to browse — multiple files allowed</div>
-        <input type="file" id="file-input" accept=".json" multiple hidden />
-      </div>
-
-      <!-- Upload result -->
-      <div id="upload-result" class="upload-result" style="display:none"></div>
-
-      <!-- Export / Clear row -->
-      <div class="bank-action-row">
-        <button class="btn btn-export" id="btn-export">
-          ⬇ Export All Questions
-        </button>
-        <button class="btn btn-ghost btn-sm" id="btn-clear-bank" style="display:none">
-          🗑 Clear Bank
-        </button>
-      </div>
-    </div>
+    <!-- ── Question Bank Button (compact) ── -->
+    <button class="btn btn-bank-home" id="btn-open-bank">
+      <span class="btn-bank-home-left">
+        <span class="btn-bank-home-icon">📚</span>
+        <span class="btn-bank-home-text">
+          <span class="btn-bank-home-title">Question Bank</span>
+          <span class="btn-bank-home-sub" id="bank-status-home">Using built-in questions</span>
+        </span>
+      </span>
+      <span class="btn-bank-home-badge" id="upload-source-badge">DEFAULT</span>
+    </button>
 
     <!-- Topic filter (multi-select) -->
     <div class="home-card">
@@ -520,6 +465,80 @@
     <div id="auto-reports-list" style="display:flex;flex-direction:column;gap:12px"></div>
 
     <button class="btn btn-ghost" id="btn-auto-reports-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- QUESTION BANK SCREEN                                  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-bank" class="screen">
+
+    <div class="bank-screen-header">
+      <span class="weak-list-title">📚 Question Bank</span>
+      <span class="upload-source-badge bank-screen-badge" id="upload-source-badge-bank">DEFAULT</span>
+    </div>
+
+    <div class="home-card upload-card" id="upload-card">
+      <p class="upload-sub" id="bank-status">Using built-in questions</p>
+
+      <!-- ── GitHub Sync Section ── -->
+      <div class="github-sync-box">
+        <div class="github-sync-label">
+          <span class="github-icon">🐙</span>
+          <span>Load from GitHub</span>
+        </div>
+        <p class="github-sync-hint">
+          Paste the raw GitHub URL and press Load. The URL is saved — press <strong>Refresh</strong> next time to re-sync.
+        </p>
+        <div class="github-input-row">
+          <input
+            type="url"
+            id="github-url-input"
+            class="github-url-input"
+            placeholder="https://raw.githubusercontent.com/you/repo/main/questions.json"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="github-btn-row">
+          <button class="btn btn-github" id="btn-github-load">⬇ Load from GitHub</button>
+          <button class="btn btn-github-refresh" id="btn-github-refresh">🔄 Refresh</button>
+          <button class="btn btn-ghost btn-sm" id="btn-github-clear">✕ Clear URL</button>
+        </div>
+        <div class="github-qr-row">
+          <button class="btn btn-qr-show" id="btn-show-qr">📲 Show QR</button>
+          <button class="btn btn-qr-scan" id="btn-scan-qr">📷 Scan QR</button>
+        </div>
+      </div>
+
+      <div class="upload-divider">
+        <span>or upload local file</span>
+      </div>
+
+      <!-- Drop zone -->
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">📥</div>
+        <div class="drop-label">Drop JSON files here</div>
+        <div class="drop-hint">or tap to browse — multiple files allowed</div>
+        <input type="file" id="file-input" accept=".json" multiple hidden />
+      </div>
+
+      <!-- Upload result -->
+      <div id="upload-result" class="upload-result" style="display:none"></div>
+
+      <!-- Export / Clear row -->
+      <div class="bank-action-row">
+        <button class="btn btn-export" id="btn-export">
+          ⬇ Export All Questions
+        </button>
+        <button class="btn btn-ghost btn-sm" id="btn-clear-bank" style="display:none">
+          🗑 Clear Bank
+        </button>
+      </div>
+    </div>
+
+    <button class="btn btn-ghost" id="btn-bank-home">← Back to Home</button>
 
   </section>
 
