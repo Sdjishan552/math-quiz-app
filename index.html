@@ -10,6 +10,40 @@
   <title>Quiz App</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── App version badge (header) ── */
+    .app-version-tag {
+      border: 1px solid rgba(255, 80, 80, 0.4);
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 10px;
+      border-radius: 20px;
+      background: linear-gradient(90deg, 
+  #5a0000, 
+  #b30000, 
+  #ff1a1a, 
+  #ff4d4d, 
+  #ff1a1a, 
+  #b30000, 
+  #5a0000
+);
+      background-size: 200% auto;
+      color: #1a0e00;
+      animation: version-shine 3s linear infinite;
+      box-shadow: 
+  0 0 10px rgba(255, 0, 0, 0.6),
+  0 0 20px rgba(179, 0, 0, 0.5);
+      user-select: none;
+      margin-top: 5px;
+    }
+    @keyframes version-shine {
+      0%   { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+  </style>
 </head>
 <body>
 
@@ -22,6 +56,8 @@
       <span id="logo-text">MathQuiz</span>
     </div>
     <span class="logo-sub">Adaptive Practice Engine</span>
+    <!-- App Version Badge -->
+    <div class="app-version-tag" id="app-version-tag">⚙ v—</div>
 
     <!-- XP Bar -->
     <div class="xp-bar-wrap" id="xp-bar-wrap">
