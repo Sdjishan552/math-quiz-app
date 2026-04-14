@@ -108,7 +108,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
   }
+
+  loadAppVersion();
 });
+
+// ══════════════════════════════════════════════════════════
+// APP VERSION BADGE
+// Reads the active SW cache name (e.g. "mathquiz-v3.38")
+// and injects the version number into #app-version-tag.
+// To update: just change CACHE_NAME in service-worker.js — done.
+// ══════════════════════════════════════════════════════════
+
+async function loadAppVersion() {
+  var el = document.getElementById('app-version-tag');
+  if (!el) return;
+
+  try {
+    // caches.keys() returns all cache names created by this origin
+    var keys = await caches.keys();
+
+    // Find the cache whose name starts with "mathquiz-v"
+    var swCache = keys.find(function(k) { return k.startsWith('mathquiz-v'); });
+
+    if (swCache) {
+      // Extract everything after "mathquiz-" e.g. "v3.38"
+      var version = swCache.replace('mathquiz-', '');
+      el.textContent = '⚙ ' + version;
+    } else {
+      // SW not yet activated on very first load — hide gracefully
+      el.textContent = '⚙ v—';
+    }
+  } catch (err) {
+    // Cache API unavailable (non-HTTPS dev server etc.) — hide badge
+    el.style.display = 'none';
+  }
+}
 
 // ══════════════════════════════════════════════════════════
 // SUBJECT SWITCHING
