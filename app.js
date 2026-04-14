@@ -1632,22 +1632,10 @@ function startQuiz(mode) {
 }
 
 function loadQuestion() {
-  // If we've gone past the end of the main queue, loop back to skipped ones
   if (sessionIndex >= sessionQueue.length) {
-    if (skippedIndices.length > 0) {
-      // Re-queue the skipped questions at the end and continue
-      var toRequeue = skippedIndices.slice();
-      skippedIndices = [];
-      toRequeue.forEach(function(q) { sessionQueue.push(q); });
-      // sessionIndex is already at sessionQueue.length before the push, so it points to first requeued
-    } else {
-      showResult();
-      return;
-    }
+    showResult();
+    return;
   }
-
-  // Also: if current index still >= length after requeue (shouldn't happen, but guard)
-  if (sessionIndex >= sessionQueue.length) { showResult(); return; }
 
   currentQ = sessionQueue[sessionIndex];
   var total = sessionQueue.length;
@@ -1691,14 +1679,12 @@ function loadQuestion() {
   document.getElementById('feedback').style.display  = 'none';
   document.getElementById('btn-next').style.display  = 'none';
 
-  // Skip button: visible only when no answer yet
+  // Don't Know button: visible only when no answer yet
   var skipBtn = document.getElementById('btn-skip');
   if (skipBtn) {
     skipBtn.classList.remove('hidden');
     skipBtn.style.display = 'flex';
   }
-
-  updateSkipBar();
 }
 
 function selectOption(selected, btn) {
@@ -1738,24 +1724,34 @@ function nextQuestion() { loadQuestion(); }
 
 function skipQuestion() {
   if (!currentQ) return;
-  // Push this question to the end of the queue (will reappear)
-  skippedIndices.push(currentQ);
+
+  // Treat "Don't Know" as a wrong answer
+  var optBtns = document.querySelectorAll('.option-btn');
+  optBtns.forEach(function(b) {
+    b.disabled = true;
+    if (b.textContent === currentQ.correct) b.classList.add('correct');
+  });
+
+  attempted++;
+  sessionWrong.push(currentQ);
+  updateWeakStats(currentQ.id, false);
+  awardXP(XP_PER_WRONG);
+
+  document.getElementById('feedback').innerHTML =
+    '❓ Don\'t Know — Correct: <strong>' + currentQ.correct + '</strong>';
+  document.getElementById('feedback').className = 'feedback-banner wrong';
+  document.getElementById('feedback').style.display = 'block';
+  document.getElementById('btn-next').style.display  = 'flex';
+
+  // Hide the Don't Know button once used
+  var skipBtn = document.getElementById('btn-skip');
+  if (skipBtn) skipBtn.style.display = 'none';
+
   sessionIndex++;
-  updateSkipBar();
-  loadQuestion();
 }
 
 function updateSkipBar() {
-  var bar = document.getElementById('skip-pending-bar');
-  var txt = document.getElementById('skip-pending-text');
-  if (!bar || !txt) return;
-  var count = skippedIndices.length;
-  if (count > 0) {
-    bar.style.display = 'flex';
-    txt.textContent   = count + ' skipped — will reappear after current questions';
-  } else {
-    bar.style.display = 'none';
-  }
+  // Skip bar removed — Don't Know is now treated as a wrong answer, no re-queuing
 }
 
 function updateWeakStats(id, isCorrect) {
