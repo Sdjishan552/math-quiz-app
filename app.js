@@ -40,6 +40,7 @@ const META_KEY      = () => sKey('bank_meta');
 const GITHUB_KEY    = () => sKey('github_url');
 const HISTORY_KEY   = () => sKey('session_history');
 const BOOKMARK_KEY  = () => sKey('bookmarks');
+const RESUME_KEY    = () => sKey('resume_snapshot');
 
 // Auto-report storage keys (global, not per-subject)
 const AUTO_REPORTS_KEY    = 'quiz_auto_reports';       // list of saved report snapshots
@@ -198,6 +199,7 @@ function onQuestionsReady(source) {
   updateHomeStats();
   updateBankUI(source);
   updateSetupHint();
+  checkForResume();
   showScreen('home');
 }
 
@@ -1179,6 +1181,109 @@ function loadWeakStats() {
 
 function saveWeakStats() { localStorage.setItem(WEAK_KEY(), JSON.stringify(weakStats)); }
 
+// ══════════════════════════════════════════════════════════
+// RESUME SNAPSHOT — save/restore mid-quiz state
+// ══════════════════════════════════════════════════════════
+
+function saveResumeSnapshot() {
+  // Only save for modes that make sense to resume
+  // (not 'retry' since that is ephemeral; all others are fine)
+  if (currentMode === 'retry') return;
+  var snap = {
+    mode:          currentMode,
+    sessionQueue:  sessionQueue,
+    sessionIndex:  sessionIndex,
+    score:         score,
+    attempted:     attempted,
+    sessionWrong:  sessionWrong,
+    selectedTopics: selectedTopics,
+    timerMode:     timerMode,
+    timerSeconds:  timerSeconds,
+    savedAt:       Date.now()
+  };
+  try { localStorage.setItem(RESUME_KEY(), JSON.stringify(snap)); } catch(e) {}
+}
+
+function loadResumeSnapshot() {
+  try {
+    var raw = localStorage.getItem(RESUME_KEY());
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function clearResumeSnapshot() {
+  localStorage.removeItem(RESUME_KEY());
+}
+
+function checkForResume() {
+  var snap = loadResumeSnapshot();
+  var banner = document.getElementById('resume-banner');
+  if (!banner) return;
+  if (!snap || !snap.sessionQueue || snap.sessionQueue.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  // Build a helpful description of the saved quiz
+  var remaining = snap.sessionQueue.length - snap.sessionIndex;
+  var modeLabel = snap.mode === 'overall'   ? '🌐 Overall Quiz'
+                : snap.mode === 'weaktest'  ? '🔴 Weak Test'
+                : snap.mode === 'bookmark'  ? '🔖 Bookmarks Quiz'
+                : snap.selectedTopics && snap.selectedTopics.length > 0
+                  ? '📘 ' + (snap.selectedTopics.length === 1 ? snap.selectedTopics[0] : snap.selectedTopics.length + ' Topics')
+                  : '📘 Topic Quiz';
+  var timeAgo = formatTimeAgo(snap.savedAt);
+  document.getElementById('resume-mode-label').textContent    = modeLabel;
+  document.getElementById('resume-progress-label').textContent =
+    snap.attempted + ' answered · ' + remaining + ' left · ' + snap.score + ' correct';
+  document.getElementById('resume-time-ago').textContent = 'Left ' + timeAgo;
+  banner.style.display = 'flex';
+}
+
+function formatTimeAgo(ts) {
+  var diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60)  return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+function resumeQuiz() {
+  var snap = loadResumeSnapshot();
+  if (!snap) return;
+  currentMode    = snap.mode;
+  sessionQueue   = snap.sessionQueue;
+  sessionIndex   = snap.sessionIndex;
+  score          = snap.score;
+  attempted      = snap.attempted;
+  sessionWrong   = snap.sessionWrong || [];
+  selectedTopics = snap.selectedTopics || [];
+  timerMode      = snap.timerMode || 'none';
+  timerSeconds   = snap.timerSeconds || 0;
+
+  document.getElementById('resume-banner').style.display = 'none';
+
+  // Restart timer from where it was left (count-up only)
+  stopTimer();
+  if (timerMode === 'countup') {
+    updateTimerDisplay();
+    document.getElementById('timer-display').style.display = 'flex';
+    timerInterval = setInterval(function() { timerSeconds++; updateTimerDisplay(); }, 1000);
+  } else {
+    document.getElementById('timer-display').style.display = 'none';
+  }
+
+  showScreen('quiz');
+  updateModeIndicator();
+  loadQuestion();
+}
+
+function discardResume() {
+  clearResumeSnapshot();
+  document.getElementById('resume-banner').style.display = 'none';
+  showToast('Previous quiz discarded.');
+}
+
 function populateTopics() {
   var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
   var list   = document.getElementById('multi-select-list');
@@ -1594,6 +1699,13 @@ function bindEvents() {
       });
     });
   }
+
+  // Resume banner buttons
+  var btnResume  = document.getElementById('btn-resume-continue');
+  var btnDiscard = document.getElementById('btn-resume-discard');
+  if (btnResume)  btnResume.addEventListener('click', resumeQuiz);
+  if (btnDiscard) btnDiscard.addEventListener('click', discardResume);
+
 } // end bindEvents
 
 // ══════════════════════════════════════════════════════════
@@ -1628,6 +1740,7 @@ function startQuiz(mode) {
   startTimer();
   showScreen('quiz');
   updateModeIndicator();
+  saveResumeSnapshot();
   loadQuestion();
 }
 
@@ -1718,6 +1831,7 @@ function selectOption(selected, btn) {
   if (skipBtn) skipBtn.style.display = 'none';
 
   sessionIndex++;
+  saveResumeSnapshot();
 }
 
 function nextQuestion() { loadQuestion(); }
@@ -1748,6 +1862,7 @@ function skipQuestion() {
   if (skipBtn) skipBtn.style.display = 'none';
 
   sessionIndex++;
+  saveResumeSnapshot();
 }
 
 function updateSkipBar() {
@@ -1835,6 +1950,7 @@ function showResult() {
   if (sessionWrong.length > 0) retryBtn.textContent = '🔁 Retry ' + sessionWrong.length + ' Wrong';
 
   if (attempted > 0) saveSession(buildSessionEntry());
+  clearResumeSnapshot();
 
   showScreen('result');
   updateHomeStats();
@@ -2009,11 +2125,10 @@ function startBookmarkQuiz() {
   startTimer();
   showScreen('quiz');
   updateModeIndicator();
+  saveResumeSnapshot();
   loadQuestion();
 }
 
-// ══════════════════════════════════════════════════════════
-// ANALYTICS SCREEN — Topic Accuracy
 // ══════════════════════════════════════════════════════════
 
 function showAnalyticsScreen() {
