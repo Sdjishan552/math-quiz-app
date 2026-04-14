@@ -2523,9 +2523,9 @@ canvas {
   flex: 0 0 auto;
   padding: 0 20px;
   background: var(--surface2);
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--amber, #f59e0b);
   border-radius: var(--radius-sm);
-  color: var(--muted);
+  color: var(--amber, #f59e0b);
   font-size: 0.88rem;
   font-weight: 700;
   font-family: 'Nunito', sans-serif;
@@ -2536,9 +2536,9 @@ canvas {
 }
 
 .btn-skip:hover {
-  border-color: var(--cyan);
-  color: var(--cyan);
-  background: var(--cyan-bg);
+  border-color: var(--amber, #f59e0b);
+  color: var(--surface);
+  background: var(--amber, #f59e0b);
 }
 
 .btn-skip:active {
