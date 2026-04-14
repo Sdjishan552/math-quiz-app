@@ -795,7 +795,7 @@ function loadFromLocalStorage() {
 
 var clearConfirmStep  = 0;
 var clearConfirmTimer = null;
-var clearMode         = null;  // 'questions' | 'all'
+var clearMode         = null;  // 'questions' | 'stats' | 'all'
 
 function clearQuestionBank() {
   // First tap always shows the choice modal
@@ -832,6 +832,13 @@ function showClearChoiceModal() {
     '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete question bank for current subject (' + activeSubject + ') — stats are kept</div>',
     '</button>',
 
+    '<button id="clr-stats-btn" style="width:100%;padding:14px 16px;margin-bottom:12px;',
+    'background:var(--surface2);border:1px solid var(--yellow,#f5a623);border-radius:12px;',
+    'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
+    '<div style="font-size:1rem;margin-bottom:3px">🧹 All Data Except Questions</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete stats, history, weak list, bookmarks & XP — questions are kept safe.</div>',
+    '</button>',
+
     '<button id="clr-all-btn" style="width:100%;padding:14px 16px;margin-bottom:20px;',
     'background:var(--surface2);border:1px solid var(--red);border-radius:12px;',
     'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
@@ -853,6 +860,13 @@ function showClearChoiceModal() {
     clearConfirmStep = 1;
     updateClearBtnLabel();
     showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL ' + allQuestions.length + ' questions for ' + activeSubject + '. Tap 4 more times to confirm.');
+  };
+  document.getElementById('clr-stats-btn').onclick = function() {
+    modal.remove();
+    clearMode = 'stats';
+    clearConfirmStep = 1;
+    updateClearBtnLabel();
+    showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL stats, history, weak list, bookmarks & XP for BOTH subjects. Questions are safe. Tap 4 more times to confirm.');
   };
   document.getElementById('clr-all-btn').onclick = function() {
     modal.remove();
@@ -895,6 +909,8 @@ function _doClearConfirmStep() {
     updateClearBtnLabel();
     if (mode === 'questions') {
       _execClearQuestions();
+    } else if (mode === 'stats') {
+      _execClearStats();
     } else {
       _execClearAll();
     }
@@ -918,6 +934,28 @@ function _execClearQuestions() {
     showUploadResult('success', '✅ Questions cleared. Stats and history are untouched. Upload a JSON file to begin.');
     onQuestionsReady('default');
   }
+}
+
+function _execClearStats() {
+  var statsKeys = ['session_history', 'weak_stats', 'bookmarks', 'github_url'];
+  var subjects  = ['maths', 'reasoning'];
+  subjects.forEach(function(subj) {
+    statsKeys.forEach(function(base) {
+      localStorage.removeItem('quiz_' + subj + '_' + base);
+    });
+  });
+  localStorage.removeItem(AUTO_REPORTS_KEY);
+  localStorage.removeItem(LAST_WEEKLY_KEY);
+  localStorage.removeItem(LAST_MONTHLY_KEY);
+  localStorage.removeItem(UNREAD_REPORTS_KEY);
+  localStorage.removeItem(XP_KEY);
+
+  weakStats = {}; bookmarks = {};
+  updateXPBar();
+  updateReportsBadge();
+  updateHomeStats();
+  showUploadResult('success', '✅ All stats, history, weak list, bookmarks & XP cleared. Your questions are untouched.');
+  showToast('Stats cleared. Questions are safe!');
 }
 
 function _execClearAll() {
