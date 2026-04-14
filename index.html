@@ -92,6 +92,9 @@
             <span class="multi-select-arrow">▾</span>
           </button>
           <div class="multi-select-dropdown" id="multi-select-dropdown">
+            <div class="multi-select-search-wrap">
+              <input type="text" id="topic-search-input" class="topic-search-input" placeholder="🔍 Search topics…" autocomplete="off" />
+            </div>
             <div class="multi-select-actions">
               <button class="multi-select-action-btn" id="btn-select-all-topics">Select All</button>
               <button class="multi-select-action-btn" id="btn-clear-topics">Clear</button>
@@ -240,10 +243,19 @@
     <!-- Feedback -->
     <div class="feedback-banner" id="feedback" style="display:none"></div>
 
-    <!-- Next -->
-    <button class="btn btn-primary" id="btn-next" style="display:none">
-      Next Question →
-    </button>
+    <!-- Skip indicator -->
+    <div class="skip-pending-bar" id="skip-pending-bar" style="display:none">
+      <span class="skip-pending-icon">⏭</span>
+      <span id="skip-pending-text">0 skipped — will reappear</span>
+    </div>
+
+    <!-- Next / Skip row -->
+    <div class="quiz-action-row">
+      <button class="btn btn-skip" id="btn-skip">⏭ Skip</button>
+      <button class="btn btn-primary" id="btn-next" style="display:none">
+        Next Question →
+      </button>
+    </div>
 
     <!-- Back -->
     <button class="btn btn-ghost" id="btn-home">← Back to Home</button>
