@@ -51,7 +51,20 @@
   <!-- ══════════════════════════════════════════════════════ -->
   <section id="screen-home" class="screen">
 
-    <!-- Stats overview -->
+    <!-- Resume Banner (shown when an unfinished quiz exists) -->
+    <div class="resume-banner" id="resume-banner" style="display:none">
+      <div class="resume-banner-icon">⏸️</div>
+      <div class="resume-banner-info">
+        <div class="resume-banner-title">Unfinished Quiz</div>
+        <div class="resume-banner-mode" id="resume-mode-label">—</div>
+        <div class="resume-banner-progress" id="resume-progress-label">—</div>
+        <div class="resume-banner-time" id="resume-time-ago">—</div>
+      </div>
+      <div class="resume-banner-actions">
+        <button class="btn btn-resume-continue" id="btn-resume-continue">▶ Continue</button>
+        <button class="btn btn-resume-discard"  id="btn-resume-discard">✕ Discard</button>
+      </div>
+    </div>
     <div class="home-card">
       <h2>Your Progress</h2>
       <div class="stats-row">
