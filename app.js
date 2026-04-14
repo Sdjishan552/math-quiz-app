@@ -169,12 +169,20 @@ async function switchSubject(subj, isInit) {
     } else if (cfg.fallbackJson) {
       try {
         var r = await fetch(cfg.fallbackJson);
-        if (!r.ok) throw new Error('fetch failed');
-        var data = await r.json();
+        if (!r.ok) throw new Error('Built-in question file not found (HTTP ' + r.status + ').');
+        var contentType = r.headers.get('content-type') || '';
+        if (contentType.indexOf('application/json') === -1 && contentType.indexOf('text/plain') === -1) {
+          throw new Error('Built-in question file returned unexpected content. Please upload a JSON file or load from GitHub.');
+        }
+        var text = await r.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) {
+          throw new Error('Built-in question file is not valid JSON. Please upload your own JSON file or load from GitHub.');
+        }
         allQuestions = data;
         onQuestionsReady('default');
-      } catch {
-        showUploadResult('error', 'Could not load built-in questions. Upload a JSON file or load from GitHub to begin.');
+      } catch(e) {
+        showUploadResult('error', e.message || 'Could not load built-in questions. Upload a JSON file or load from GitHub to begin.');
         showScreen('home');
       }
     } else {
@@ -238,7 +246,15 @@ async function loadFromGithub() {
     var response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status + ' — check the URL is correct and the repo is public');
 
-    var raw = await response.json();
+    var contentType = response.headers.get('content-type') || '';
+    var rawText = await response.text();
+    if (rawText.trimStart().startsWith('<')) {
+      throw new Error('The URL returned an HTML page, not JSON. Make sure you are using the raw GitHub URL (raw.githubusercontent.com), not the regular GitHub page URL.');
+    }
+    var raw;
+    try { raw = JSON.parse(rawText); } catch(e) {
+      throw new Error('Invalid JSON in file: ' + e.message + '. Check your questions file for syntax errors.');
+    }
     if (!Array.isArray(raw)) throw new Error('JSON must be an array of question objects');
 
     var valid = 0, skipped = 0;
@@ -328,7 +344,10 @@ async function fetchAndMergeGithubUrl(rawUrl) {
     var url      = convertToRawUrl(rawUrl);
     var response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
-    var raw = await response.json();
+    var rawText = await response.text();
+    if (rawText.trimStart().startsWith('<')) throw new Error('URL returned HTML, not JSON');
+    var raw;
+    try { raw = JSON.parse(rawText); } catch(e) { throw new Error('Invalid JSON: ' + e.message); }
     if (!Array.isArray(raw)) throw new Error('Not an array');
     var newQuestions = [];
     raw.forEach(function(item, idx) { var r = validateQuestion(item, idx); if (r.ok) newQuestions.push(r.q); });
