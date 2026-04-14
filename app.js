@@ -79,6 +79,10 @@ let selectedTopics = [];
 let currentQ       = null;
 let bookmarks      = {};
 
+// Skip state
+let skippedIndices = [];   // original queue positions that were skipped
+let seenCount      = 0;    // how many distinct questions have been seen at least once
+
 // Timer state
 let timerMode      = 'none';
 let timerSeconds   = 0;
@@ -1455,6 +1459,8 @@ function bindEvents() {
 
   // Quiz
   document.getElementById('btn-next').addEventListener('click', nextQuestion);
+  var skipBtnEl = document.getElementById('btn-skip');
+  if (skipBtnEl) skipBtnEl.addEventListener('click', skipQuestion);
   document.getElementById('btn-home').addEventListener('click', function() { stopTimer(); showScreen('home'); });
   document.getElementById('btn-result-home').addEventListener('click', function() { showScreen('home'); updateHomeStats(); });
   document.getElementById('btn-retry-wrong').addEventListener('click', function() { startQuiz('retry'); });
@@ -1518,6 +1524,17 @@ function bindEvents() {
   document.getElementById('multi-select-toggle').addEventListener('click', function() {
     var dd = document.getElementById('multi-select-dropdown');
     dd.classList.toggle('open');
+    // Clear search when opening
+    if (dd.classList.contains('open')) {
+      var si = document.getElementById('topic-search-input');
+      if (si) {
+        si.value = '';
+        document.querySelectorAll('.multi-select-item-row').forEach(function(row) {
+          row.classList.remove('hidden-by-search');
+        });
+        setTimeout(function() { si.focus(); }, 60);
+      }
+    }
   });
   document.addEventListener('click', function(e) {
     var wrap = document.getElementById('multi-select-wrap');
@@ -1527,18 +1544,38 @@ function bindEvents() {
     }
   });
   document.getElementById('btn-select-all-topics').addEventListener('click', function() {
-    document.querySelectorAll('.topic-checkbox').forEach(function(cb) {
+    document.querySelectorAll('.multi-select-item-row:not(.hidden-by-search) .topic-checkbox').forEach(function(cb) {
       cb.checked = true;
       if (!selectedTopics.includes(cb.value)) selectedTopics.push(cb.value);
     });
     updateMultiSelectLabel(); updateTopicQCount();
   });
   document.getElementById('btn-clear-topics').addEventListener('click', function() {
-    document.querySelectorAll('.topic-checkbox').forEach(function(cb) { cb.checked = false; });
-    selectedTopics = [];
+    document.querySelectorAll('.multi-select-item-row:not(.hidden-by-search) .topic-checkbox').forEach(function(cb) {
+      cb.checked = false;
+      selectedTopics = selectedTopics.filter(function(t) { return t !== cb.value; });
+    });
     updateMultiSelectLabel(); updateTopicQCount();
   });
-}
+
+  // Topic search filter
+  var topicSearchInput = document.getElementById('topic-search-input');
+  if (topicSearchInput) {
+    topicSearchInput.addEventListener('input', function() {
+      var query = this.value.trim().toLowerCase();
+      document.querySelectorAll('.multi-select-item-row').forEach(function(row) {
+        var nameEl = row.querySelector('.topic-item-name');
+        if (!nameEl) return;
+        var name = nameEl.textContent.toLowerCase();
+        if (query === '' || name.includes(query)) {
+          row.classList.remove('hidden-by-search');
+        } else {
+          row.classList.add('hidden-by-search');
+        }
+      });
+    });
+  }
+} // end bindEvents
 
 // ══════════════════════════════════════════════════════════
 // QUIZ START
@@ -1547,6 +1584,7 @@ function bindEvents() {
 function startQuiz(mode) {
   currentMode = mode;
   score = 0; attempted = 0; sessionWrong = []; sessionIndex = 0;
+  skippedIndices = []; seenCount = 0;
   timerMode = 'none';
 
   if (mode === 'normal') {
@@ -1575,11 +1613,27 @@ function startQuiz(mode) {
 }
 
 function loadQuestion() {
+  // If we've gone past the end of the main queue, loop back to skipped ones
+  if (sessionIndex >= sessionQueue.length) {
+    if (skippedIndices.length > 0) {
+      // Re-queue the skipped questions at the end and continue
+      var toRequeue = skippedIndices.slice();
+      skippedIndices = [];
+      toRequeue.forEach(function(q) { sessionQueue.push(q); });
+      // sessionIndex is already at sessionQueue.length before the push, so it points to first requeued
+    } else {
+      showResult();
+      return;
+    }
+  }
+
+  // Also: if current index still >= length after requeue (shouldn't happen, but guard)
   if (sessionIndex >= sessionQueue.length) { showResult(); return; }
 
   currentQ = sessionQueue[sessionIndex];
   var total = sessionQueue.length;
 
+  // Progress shows position among total visible (original + re-queued skips)
   document.getElementById('progress-text').textContent = (sessionIndex + 1) + ' / ' + total;
   document.getElementById('progress-fill').style.width = ((sessionIndex / total) * 100) + '%';
   document.getElementById('q-number').textContent      = 'Question ' + (sessionIndex + 1);
@@ -1615,8 +1669,17 @@ function loadQuestion() {
     container.appendChild(btn);
   });
 
-  document.getElementById('feedback').style.display = 'none';
+  document.getElementById('feedback').style.display  = 'none';
   document.getElementById('btn-next').style.display  = 'none';
+
+  // Skip button: visible only when no answer yet
+  var skipBtn = document.getElementById('btn-skip');
+  if (skipBtn) {
+    skipBtn.classList.remove('hidden');
+    skipBtn.style.display = 'flex';
+  }
+
+  updateSkipBar();
 }
 
 function selectOption(selected, btn) {
@@ -1644,10 +1707,37 @@ function selectOption(selected, btn) {
   updateWeakStats(currentQ.id, isCorrect);
   document.getElementById('feedback').style.display = 'block';
   document.getElementById('btn-next').style.display  = 'flex';
+
+  // Hide skip button once answered
+  var skipBtn = document.getElementById('btn-skip');
+  if (skipBtn) skipBtn.style.display = 'none';
+
   sessionIndex++;
 }
 
 function nextQuestion() { loadQuestion(); }
+
+function skipQuestion() {
+  if (!currentQ) return;
+  // Push this question to the end of the queue (will reappear)
+  skippedIndices.push(currentQ);
+  sessionIndex++;
+  updateSkipBar();
+  loadQuestion();
+}
+
+function updateSkipBar() {
+  var bar = document.getElementById('skip-pending-bar');
+  var txt = document.getElementById('skip-pending-text');
+  if (!bar || !txt) return;
+  var count = skippedIndices.length;
+  if (count > 0) {
+    bar.style.display = 'flex';
+    txt.textContent   = count + ' skipped — will reappear after current questions';
+  } else {
+    bar.style.display = 'none';
+  }
+}
 
 function updateWeakStats(id, isCorrect) {
   if (!weakStats[id]) weakStats[id] = { attempts: 0, wrong: 0 };
