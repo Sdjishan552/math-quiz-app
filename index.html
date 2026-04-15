@@ -207,17 +207,7 @@
     </div>
 
     <button class="btn btn-notes-home" id="btn-notes">
-      <span class="btn-notes-left">
-        <span class="btn-notes-icon-wrap">📝</span>
-        <span class="btn-notes-label-wrap">
-          <span class="btn-notes-title">Topic Notes</span>
-          <span class="btn-notes-sub">Formulas · Cheatsheets · PDFs</span>
-        </span>
-      </span>
-      <span class="btn-notes-right">
-        <span class="weak-badge notes-count-badge" id="notes-count-badge">0 topics</span>
-        <span class="btn-notes-arrow">›</span>
-      </span>
+      📝 Topic Notes <span class="weak-badge notes-count-badge" id="notes-count-badge">0 topics</span>
     </button>
 
   </section>
@@ -747,24 +737,9 @@
   <div class="pdf-viewer-box">
     <div class="pdf-viewer-header">
       <div class="pdf-viewer-title" id="pdf-viewer-title">document.pdf</div>
-      <div class="pdf-viewer-header-right">
-        <span class="pdf-page-info" id="pdf-page-info"></span>
-        <button class="pdf-viewer-close" id="btn-pdf-viewer-close">✕ Close</button>
-      </div>
+      <button class="pdf-viewer-close" id="btn-pdf-viewer-close">✕ Close</button>
     </div>
-    <!-- PDF.js canvas render area -->
-    <div class="pdf-viewer-canvas-wrap" id="pdf-viewer-canvas-wrap">
-      <div class="pdf-viewer-loading" id="pdf-viewer-loading">
-        <div class="pdf-spinner"></div>
-        <span>Loading PDF…</span>
-      </div>
-      <div class="pdf-pages-container" id="pdf-pages-container"></div>
-    </div>
-    <div class="pdf-viewer-nav" id="pdf-viewer-nav" style="display:none">
-      <button class="pdf-nav-btn" id="pdf-prev-btn">‹ Prev</button>
-      <span class="pdf-nav-label" id="pdf-nav-label">Page 1 of 1</span>
-      <button class="pdf-nav-btn" id="pdf-next-btn">Next ›</button>
-    </div>
+    <iframe class="pdf-viewer-frame" id="pdf-viewer-frame" src=""></iframe>
   </div>
 </div>
 
@@ -920,12 +895,6 @@
 
 <script src="qrcode-gen.js"></script>
 <script src="jsQR.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
-</script>
 <script src="app.js"></script>
 </body>
 </html>
