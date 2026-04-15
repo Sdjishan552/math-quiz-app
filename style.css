@@ -3213,3 +3213,234 @@ canvas {
   border: none;
   background: #fff;
 }
+/* ══════════════════════════════════════════════════════════
+   NOTES OVERVIEW TAB
+   ══════════════════════════════════════════════════════════ */
+
+.notes-overview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 12px;
+}
+
+/* Empty state */
+.notes-overview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 10px;
+  text-align: center;
+}
+.notes-overview-empty-icon {
+  font-size: 2.6rem;
+  margin-bottom: 4px;
+}
+.notes-overview-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.notes-overview-empty-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 280px;
+}
+
+/* Section card */
+.nov-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Section header */
+.nov-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+}
+.nov-section-icon {
+  font-size: 1rem;
+}
+.nov-section-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+.nov-section-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+/* ── Text notes body ── */
+.nov-text-body {
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Image grid ── */
+.nov-img-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+.nov-img-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 6px;
+  transition: var(--trans);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.nov-img-item:hover {
+  border-color: var(--accent);
+  transform: scale(1.03);
+}
+.nov-img-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 7px;
+}
+.nov-img-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-align: center;
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+/* ── PDF list ── */
+.nov-pdf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.nov-pdf-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  transition: var(--trans);
+}
+.nov-pdf-item:last-child {
+  border-bottom: none;
+}
+.nov-pdf-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+.nov-pdf-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.nov-pdf-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.nov-pdf-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nov-pdf-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nov-pdf-size {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.nov-pdf-btn {
+  padding: 6px 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: 'Nunito', sans-serif;
+  transition: var(--trans);
+  flex-shrink: 0;
+}
+.nov-pdf-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Drive link ── */
+.nov-drive-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  text-decoration: none;
+  transition: var(--trans);
+}
+.nov-drive-btn:hover {
+  background: rgba(255,255,255,0.04);
+}
+.nov-drive-btn-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.nov-drive-btn-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.nov-drive-btn-type {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.nov-drive-btn-url {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nov-drive-btn-arrow {
+  font-size: 1.1rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
