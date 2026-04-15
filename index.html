@@ -206,6 +206,10 @@
       </button>
     </div>
 
+    <button class="btn btn-notes-home" id="btn-notes">
+      📝 Topic Notes <span class="weak-badge notes-count-badge" id="notes-count-badge">0 topics</span>
+    </button>
+
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
@@ -524,6 +528,34 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
+  <!-- NOTES SCREEN                                          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-notes" class="screen">
+
+    <div class="notes-screen-header">
+      <span class="weak-list-title">📝 Topic Notes</span>
+      <span class="notes-subject-badge" id="notes-subject-badge">Maths</span>
+    </div>
+
+    <p class="notes-screen-hint">Tap any topic to add notes, photos, PDFs or a Drive link.</p>
+
+    <!-- Search bar for topics -->
+    <div class="notes-search-wrap">
+      <input type="text" id="notes-topic-search" class="notes-topic-search" placeholder="🔍 Search topics…" autocomplete="off" />
+    </div>
+
+    <div id="notes-topic-list" class="notes-topic-list"></div>
+
+    <div class="notes-empty-state" id="notes-empty-state" style="display:none">
+      <div class="empty-icon">📭</div>
+      <p>No topics loaded yet.<br>Load questions first to add notes.</p>
+    </div>
+
+    <button class="btn btn-ghost" id="btn-notes-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
   <!-- QUESTION BANK SCREEN                                  -->
   <!-- ══════════════════════════════════════════════════════ -->
   <section id="screen-bank" class="screen">
@@ -598,6 +630,112 @@
   </section>
 
 </div><!-- /#app -->
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- TOPIC NOTES MODAL                                     -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="notes-modal-overlay" id="notes-modal" style="display:none">
+  <div class="notes-modal">
+
+    <!-- Header -->
+    <div class="notes-modal-header">
+      <div class="notes-modal-title-wrap">
+        <span class="notes-modal-icon">📝</span>
+        <div>
+          <div class="notes-modal-title" id="notes-modal-topic-name">Topic</div>
+          <div class="notes-modal-sub" id="notes-modal-subject-label">Maths</div>
+        </div>
+      </div>
+      <button class="notes-modal-close" id="btn-notes-modal-close">✕</button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="notes-tab-bar">
+      <button class="notes-tab active" data-tab="text">✏️ Notes</button>
+      <button class="notes-tab" data-tab="images">📷 Photos</button>
+      <button class="notes-tab" data-tab="pdf">📄 PDFs</button>
+      <button class="notes-tab" data-tab="drive">🔗 Drive</button>
+    </div>
+
+    <!-- ── TEXT NOTES TAB ── -->
+    <div class="notes-tab-panel active" id="notes-panel-text">
+      <textarea
+        id="notes-text-area"
+        class="notes-textarea"
+        placeholder="Write your notes here… short reminders, formulas, cheat sheet, anything!"
+        rows="10"
+      ></textarea>
+      <div class="notes-text-actions">
+        <span class="notes-char-count" id="notes-char-count">0 chars</span>
+        <button class="btn btn-notes-save" id="btn-save-notes-text">💾 Save Notes</button>
+      </div>
+    </div>
+
+    <!-- ── IMAGES TAB ── -->
+    <div class="notes-tab-panel" id="notes-panel-images">
+      <div class="notes-img-upload-area" id="notes-img-upload-area">
+        <div class="notes-img-upload-icon">📷</div>
+        <div class="notes-img-upload-label">Tap to upload images</div>
+        <div class="notes-img-upload-hint">Photos from your notebook, diagrams, etc.</div>
+        <input type="file" id="notes-img-input" accept="image/*" multiple hidden />
+      </div>
+      <div class="notes-img-grid" id="notes-img-grid"></div>
+    </div>
+
+    <!-- ── PDF TAB ── -->
+    <div class="notes-tab-panel" id="notes-panel-pdf">
+      <div class="notes-pdf-upload-area" id="notes-pdf-upload-area">
+        <div class="notes-pdf-upload-icon">📄</div>
+        <div class="notes-pdf-upload-label">Tap to upload a PDF</div>
+        <div class="notes-pdf-upload-hint">Notes, cheat sheets, study material</div>
+        <input type="file" id="notes-pdf-input" accept="application/pdf" hidden />
+      </div>
+      <div class="notes-pdf-list" id="notes-pdf-list"></div>
+    </div>
+
+    <!-- ── DRIVE LINK TAB ── -->
+    <div class="notes-tab-panel" id="notes-panel-drive">
+      <div class="notes-drive-info">
+        <div class="notes-drive-icon">🔗</div>
+        <p class="notes-drive-desc">Paste your Google Drive PPT / Slides / Docs link here. It will appear as a quick-open button so you can jump straight to it.</p>
+      </div>
+      <div class="notes-drive-input-wrap">
+        <input
+          type="url"
+          id="notes-drive-input"
+          class="notes-drive-input"
+          placeholder="https://drive.google.com/file/d/…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn btn-notes-save" id="btn-save-drive-link">💾 Save Link</button>
+      </div>
+      <div class="notes-drive-preview" id="notes-drive-preview" style="display:none">
+        <div class="notes-drive-saved-label">Saved link:</div>
+        <a class="notes-drive-open-btn" id="notes-drive-open-btn" href="#" target="_blank" rel="noopener">
+          <span class="notes-drive-btn-icon">📂</span>
+          <span class="notes-drive-btn-text" id="notes-drive-btn-text">Open in Google Drive</span>
+          <span class="notes-drive-btn-arrow">↗</span>
+        </a>
+        <button class="btn-notes-drive-clear" id="btn-clear-drive-link">✕ Remove</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PDF VIEWER MODAL                                      -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="pdf-viewer-overlay" id="pdf-viewer-modal" style="display:none">
+  <div class="pdf-viewer-box">
+    <div class="pdf-viewer-header">
+      <div class="pdf-viewer-title" id="pdf-viewer-title">document.pdf</div>
+      <button class="pdf-viewer-close" id="btn-pdf-viewer-close">✕ Close</button>
+    </div>
+    <iframe class="pdf-viewer-frame" id="pdf-viewer-frame" src=""></iframe>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════ -->
 <!-- QR SHARE MODAL                                        -->
