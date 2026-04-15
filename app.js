@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   bindSubjectTabs();
   bindEvents();
+  bindNotesEvents();
   loadBookmarks();
   updateXPBar();
   await switchSubject('maths', true);
@@ -190,6 +191,7 @@ async function switchSubject(subj, isInit) {
   loadWeakStats();
   loadBookmarks();
   restoreGithubUrl();
+  updateNotesHomeBadge();
 
   var hasGithubUrls = !!localStorage.getItem(GITHUB_KEY());
 
@@ -4017,6 +4019,416 @@ function drawFooter(doc, pageNum, totalPages, pH, pW, C) {
   doc.setTextColor(...C.muted);
   doc.text('Quiz PWA  ·  Adaptive Practice Engine', 12, footerY + 5);
   doc.text('Page ' + pageNum + ' of ' + totalPages, pW - 12, footerY + 5, { align: 'right' });
+}
+
+// ══════════════════════════════════════════════════════════
+// NOTES SYSTEM
+// ══════════════════════════════════════════════════════════
+
+function NOTES_KEY() { return 'quiz_' + activeSubject + '_topic_notes'; }
+
+function loadAllNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY())) || {}; } catch { return {}; }
+}
+
+function saveAllNotes(data) {
+  try { localStorage.setItem(NOTES_KEY(), JSON.stringify(data)); } catch(e) {
+    showToast('⚠️ Storage full — some notes may not be saved.');
+  }
+}
+
+function getNoteForTopic(topic) {
+  var all = loadAllNotes();
+  return all[topic] || { text: '', images: [], pdfs: [], driveLink: '' };
+}
+
+function saveNoteForTopic(topic, note) {
+  var all = loadAllNotes();
+  all[topic] = note;
+  saveAllNotes(all);
+}
+
+function countTopicsWithNotes() {
+  var all = loadAllNotes();
+  return Object.keys(all).filter(function(k) {
+    var n = all[k];
+    return (n.text && n.text.trim()) || (n.images && n.images.length) || (n.pdfs && n.pdfs.length) || (n.driveLink && n.driveLink.trim());
+  }).length;
+}
+
+// ── Notes Screen ─────────────────────────────────────────
+
+function showNotesScreen() {
+  var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+  var cfg = SUBJECTS[activeSubject];
+  document.getElementById('notes-subject-badge').textContent = cfg ? cfg.label.replace('Quiz', '') : activeSubject;
+
+  var list = document.getElementById('notes-topic-list');
+  var empty = document.getElementById('notes-empty-state');
+
+  if (topics.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'flex';
+  } else {
+    empty.style.display = 'none';
+    renderNotesTopicList(topics);
+  }
+
+  // Search filter
+  var search = document.getElementById('notes-topic-search');
+  if (search) {
+    search.value = '';
+    search.oninput = function() {
+      var q = this.value.trim().toLowerCase();
+      document.querySelectorAll('.notes-topic-card').forEach(function(card) {
+        card.style.display = (!q || card.dataset.topic.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    };
+  }
+
+  showScreen('notes');
+  updateNotesHomeBadge();
+}
+
+function renderNotesTopicList(topics) {
+  var allNotes = loadAllNotes();
+  var list = document.getElementById('notes-topic-list');
+  list.innerHTML = topics.map(function(topic) {
+    var note = allNotes[topic] || {};
+    var hasText   = note.text && note.text.trim();
+    var hasImgs   = note.images && note.images.length > 0;
+    var hasPdfs   = note.pdfs && note.pdfs.length > 0;
+    var hasDrive  = note.driveLink && note.driveLink.trim();
+    var hasAny    = hasText || hasImgs || hasPdfs || hasDrive;
+
+    var badges = '';
+    if (hasText)  badges += '<span class="note-badge note-badge-text">✏️ Notes</span>';
+    if (hasImgs)  badges += '<span class="note-badge note-badge-img">📷 ' + note.images.length + '</span>';
+    if (hasPdfs)  badges += '<span class="note-badge note-badge-pdf">📄 ' + note.pdfs.length + '</span>';
+    if (hasDrive) badges += '<span class="note-badge note-badge-drive">🔗 Drive</span>';
+
+    var qCount = allQuestions.filter(function(q) { return q.topic === topic; }).length;
+
+    return '<div class="notes-topic-card ' + (hasAny ? 'has-notes' : '') + '" data-topic="' + escHtml(topic) + '" onclick="openTopicNotes(\'' + escHtml(topic).replace(/'/g, "\\'") + '\')">' +
+      '<div class="notes-topic-card-left">' +
+        '<div class="notes-topic-card-name">' + escHtml(topic) + '</div>' +
+        '<div class="notes-topic-card-meta">' + qCount + ' question' + (qCount !== 1 ? 's' : '') + (hasAny ? '' : ' · No notes yet') + '</div>' +
+      '</div>' +
+      '<div class="notes-topic-card-right">' +
+        (badges || '<span class="note-badge note-badge-empty">+ Add</span>') +
+        '<span class="notes-topic-card-arrow">›</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function updateNotesHomeBadge() {
+  var badge = document.getElementById('notes-count-badge');
+  if (!badge) return;
+  var n = countTopicsWithNotes();
+  badge.textContent = n > 0 ? n + ' noted' : '0 topics';
+}
+
+// ── Topic Notes Modal ─────────────────────────────────────
+
+var _currentNotesTopic = null;
+var _currentNote       = null;
+
+function openTopicNotes(topic) {
+  _currentNotesTopic = topic;
+  _currentNote = getNoteForTopic(topic);
+
+  document.getElementById('notes-modal-topic-name').textContent = topic;
+  var cfg = SUBJECTS[activeSubject];
+  document.getElementById('notes-modal-subject-label').textContent = cfg ? (cfg.icon + ' ' + cfg.label.replace('Quiz', '')) : activeSubject;
+
+  // Load text tab
+  var ta = document.getElementById('notes-text-area');
+  ta.value = _currentNote.text || '';
+  updateNotesCharCount();
+
+  // Load images tab
+  renderNoteImages();
+
+  // Load PDFs tab
+  renderNotePdfs();
+
+  // Load Drive tab
+  renderDriveLink();
+
+  // Switch to first tab
+  switchNotesTab('text');
+
+  document.getElementById('notes-modal').style.display = 'flex';
+}
+
+function closeTopicNotes() {
+  document.getElementById('notes-modal').style.display = 'none';
+  _currentNotesTopic = null;
+  _currentNote = null;
+  // Re-render list to show updated badges
+  var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+  if (topics.length > 0) renderNotesTopicList(topics);
+  updateNotesHomeBadge();
+}
+
+function switchNotesTab(tab) {
+  document.querySelectorAll('.notes-tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  document.querySelectorAll('.notes-tab-panel').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'notes-panel-' + tab);
+  });
+}
+
+// ── Text Notes ────────────────────────────────────────────
+
+function updateNotesCharCount() {
+  var ta = document.getElementById('notes-text-area');
+  var count = document.getElementById('notes-char-count');
+  if (ta && count) count.textContent = ta.value.length + ' chars';
+}
+
+function saveNotesText() {
+  if (!_currentNotesTopic) return;
+  _currentNote.text = document.getElementById('notes-text-area').value;
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  showToast('💾 Notes saved!');
+  updateNotesHomeBadge();
+}
+
+// ── Images ────────────────────────────────────────────────
+
+function handleNoteImages(files) {
+  if (!files || files.length === 0 || !_currentNotesTopic) return;
+  var fileArr = Array.from(files);
+  var loaded = 0;
+
+  fileArr.forEach(function(file) {
+    if (!file.type.startsWith('image/')) { showToast('⚠️ Only image files allowed'); return; }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      if (!_currentNote.images) _currentNote.images = [];
+      _currentNote.images.push({ name: file.name, data: e.target.result, addedAt: Date.now() });
+      loaded++;
+      if (loaded === fileArr.length) {
+        saveNoteForTopic(_currentNotesTopic, _currentNote);
+        renderNoteImages();
+        showToast('📷 ' + loaded + ' photo' + (loaded > 1 ? 's' : '') + ' saved!');
+        updateNotesHomeBadge();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderNoteImages() {
+  var grid = document.getElementById('notes-img-grid');
+  if (!grid || !_currentNote) return;
+  var imgs = _currentNote.images || [];
+  if (imgs.length === 0) { grid.innerHTML = ''; return; }
+  grid.innerHTML = imgs.map(function(img, i) {
+    return '<div class="notes-img-item">' +
+      '<img src="' + img.data + '" alt="' + escHtml(img.name) + '" class="notes-img-thumb" onclick="openNoteImageFull(' + i + ')" />' +
+      '<div class="notes-img-name">' + escHtml(img.name.length > 18 ? img.name.slice(0, 16) + '…' : img.name) + '</div>' +
+      '<button class="notes-img-delete" onclick="deleteNoteImage(' + i + ')">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function openNoteImageFull(idx) {
+  if (!_currentNote || !_currentNote.images || !_currentNote.images[idx]) return;
+  var img = _currentNote.images[idx];
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;padding:16px;flex-direction:column;gap:12px';
+  overlay.innerHTML = '<img src="' + img.data + '" style="max-width:100%;max-height:80vh;border-radius:12px;object-fit:contain" />' +
+    '<button style="padding:10px 24px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:0.9rem;cursor:pointer">✕ Close</button>';
+  overlay.querySelector('button').onclick = function() { document.body.removeChild(overlay); };
+  overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+  document.body.appendChild(overlay);
+}
+
+function deleteNoteImage(idx) {
+  if (!_currentNotesTopic || !_currentNote) return;
+  _currentNote.images.splice(idx, 1);
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  renderNoteImages();
+  showToast('Image removed.');
+  updateNotesHomeBadge();
+}
+
+// ── PDFs ──────────────────────────────────────────────────
+
+function handleNotePdf(file) {
+  if (!file || !_currentNotesTopic) return;
+  if (file.type !== 'application/pdf') { showToast('⚠️ Only PDF files allowed'); return; }
+
+  // 10 MB guard
+  if (file.size > 10 * 1024 * 1024) { showToast('⚠️ PDF too large (max 10 MB)'); return; }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    if (!_currentNote.pdfs) _currentNote.pdfs = [];
+    _currentNote.pdfs.push({ name: file.name, data: e.target.result, addedAt: Date.now(), size: file.size });
+    saveNoteForTopic(_currentNotesTopic, _currentNote);
+    renderNotePdfs();
+    showToast('📄 PDF saved!');
+    updateNotesHomeBadge();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderNotePdfs() {
+  var list = document.getElementById('notes-pdf-list');
+  if (!list || !_currentNote) return;
+  var pdfs = _currentNote.pdfs || [];
+  if (pdfs.length === 0) { list.innerHTML = ''; return; }
+  list.innerHTML = pdfs.map(function(pdf, i) {
+    var sizeStr = pdf.size ? (pdf.size > 1024 * 1024 ? (pdf.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.round(pdf.size / 1024) + ' KB') : '';
+    return '<div class="notes-pdf-item">' +
+      '<div class="notes-pdf-item-left">' +
+        '<span class="notes-pdf-icon">📄</span>' +
+        '<div class="notes-pdf-info">' +
+          '<div class="notes-pdf-name">' + escHtml(pdf.name) + '</div>' +
+          (sizeStr ? '<div class="notes-pdf-size">' + sizeStr + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="notes-pdf-actions">' +
+        '<button class="btn-notes-pdf-view" onclick="openPdfViewer(' + i + ')">👁 View</button>' +
+        '<button class="btn-notes-pdf-del" onclick="deleteNotePdf(' + i + ')">✕</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openPdfViewer(idx) {
+  if (!_currentNote || !_currentNote.pdfs || !_currentNote.pdfs[idx]) return;
+  var pdf = _currentNote.pdfs[idx];
+  document.getElementById('pdf-viewer-title').textContent = pdf.name;
+  document.getElementById('pdf-viewer-frame').src = pdf.data;
+  document.getElementById('pdf-viewer-modal').style.display = 'flex';
+}
+
+function closePdfViewer() {
+  document.getElementById('pdf-viewer-modal').style.display = 'none';
+  document.getElementById('pdf-viewer-frame').src = '';
+}
+
+function deleteNotePdf(idx) {
+  if (!_currentNotesTopic || !_currentNote) return;
+  _currentNote.pdfs.splice(idx, 1);
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  renderNotePdfs();
+  showToast('PDF removed.');
+  updateNotesHomeBadge();
+}
+
+// ── Drive Link ────────────────────────────────────────────
+
+function saveDriveLink() {
+  if (!_currentNotesTopic) return;
+  var val = document.getElementById('notes-drive-input').value.trim();
+  _currentNote.driveLink = val;
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  renderDriveLink();
+  showToast(val ? '🔗 Drive link saved!' : 'Drive link cleared.');
+  updateNotesHomeBadge();
+}
+
+function clearDriveLink() {
+  if (!_currentNotesTopic) return;
+  _currentNote.driveLink = '';
+  document.getElementById('notes-drive-input').value = '';
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  renderDriveLink();
+  showToast('Drive link removed.');
+  updateNotesHomeBadge();
+}
+
+function renderDriveLink() {
+  var input   = document.getElementById('notes-drive-input');
+  var preview = document.getElementById('notes-drive-preview');
+  var openBtn = document.getElementById('notes-drive-open-btn');
+  var btnText = document.getElementById('notes-drive-btn-text');
+  if (!_currentNote) return;
+
+  var link = _currentNote.driveLink || '';
+  input.value = link;
+
+  if (link) {
+    preview.style.display = 'flex';
+    openBtn.href = link;
+    // Try to show a nice label
+    var label = 'Open in Google Drive';
+    if (link.includes('presentation') || link.includes('pptx') || link.includes('slides')) label = 'Open Presentation in Drive';
+    else if (link.includes('document') || link.includes('docx'))  label = 'Open Document in Drive';
+    else if (link.includes('spreadsheet') || link.includes('xlsx')) label = 'Open Spreadsheet in Drive';
+    btnText.textContent = label;
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+// ── Bind Notes Events ─────────────────────────────────────
+
+function bindNotesEvents() {
+  // Home → Notes screen
+  var btnNotes = document.getElementById('btn-notes');
+  if (btnNotes) btnNotes.addEventListener('click', showNotesScreen);
+
+  // Notes screen → Home
+  var btnNotesHome = document.getElementById('btn-notes-home');
+  if (btnNotesHome) btnNotesHome.addEventListener('click', function() { showScreen('home'); });
+
+  // Close modal
+  var closeBtn = document.getElementById('btn-notes-modal-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeTopicNotes);
+
+  // Close on overlay click
+  var modal = document.getElementById('notes-modal');
+  if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeTopicNotes(); });
+
+  // Notes tabs
+  document.querySelectorAll('.notes-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() { switchNotesTab(tab.dataset.tab); });
+  });
+
+  // Text area typing
+  var ta = document.getElementById('notes-text-area');
+  if (ta) ta.addEventListener('input', updateNotesCharCount);
+
+  // Save text button
+  var saveTextBtn = document.getElementById('btn-save-notes-text');
+  if (saveTextBtn) saveTextBtn.addEventListener('click', saveNotesText);
+
+  // Image upload
+  var imgArea = document.getElementById('notes-img-upload-area');
+  var imgInput = document.getElementById('notes-img-input');
+  if (imgArea) imgArea.addEventListener('click', function() { imgInput.click(); });
+  if (imgInput) imgInput.addEventListener('change', function() { handleNoteImages(this.files); this.value = ''; });
+
+  // PDF upload
+  var pdfArea = document.getElementById('notes-pdf-upload-area');
+  var pdfInput = document.getElementById('notes-pdf-input');
+  if (pdfArea) pdfArea.addEventListener('click', function() { pdfInput.click(); });
+  if (pdfInput) pdfInput.addEventListener('change', function() { if (this.files[0]) handleNotePdf(this.files[0]); this.value = ''; });
+
+  // Drive link
+  var saveDriveBtn = document.getElementById('btn-save-drive-link');
+  if (saveDriveBtn) saveDriveBtn.addEventListener('click', saveDriveLink);
+
+  var clearDriveBtn = document.getElementById('btn-clear-drive-link');
+  if (clearDriveBtn) clearDriveBtn.addEventListener('click', clearDriveLink);
+
+  // Drive input — save on Enter
+  var driveInput = document.getElementById('notes-drive-input');
+  if (driveInput) driveInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') saveDriveLink(); });
+
+  // PDF viewer close
+  var pdfViewerClose = document.getElementById('btn-pdf-viewer-close');
+  if (pdfViewerClose) pdfViewerClose.addEventListener('click', closePdfViewer);
+  var pdfViewerOverlay = document.getElementById('pdf-viewer-modal');
+  if (pdfViewerOverlay) pdfViewerOverlay.addEventListener('click', function(e) { if (e.target === pdfViewerOverlay) closePdfViewer(); });
 }
 
 // ══════════════════════════════════════════════════════════
