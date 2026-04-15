@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mathquiz-v3.45';
+const CACHE_NAME = 'mathquiz-v3.46';
 
 const ASSETS = [
   './',
