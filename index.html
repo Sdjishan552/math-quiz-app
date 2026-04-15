@@ -651,14 +651,20 @@
 
     <!-- Tab bar -->
     <div class="notes-tab-bar">
-      <button class="notes-tab active" data-tab="text">✏️ Notes</button>
+      <button class="notes-tab active" data-tab="overview">📋 Overview</button>
+      <button class="notes-tab" data-tab="text">✏️ Notes</button>
       <button class="notes-tab" data-tab="images">📷 Photos</button>
       <button class="notes-tab" data-tab="pdf">📄 PDFs</button>
       <button class="notes-tab" data-tab="drive">🔗 Drive</button>
     </div>
 
+    <!-- ── OVERVIEW TAB ── -->
+    <div class="notes-tab-panel active" id="notes-panel-overview">
+      <div id="notes-overview-content" class="notes-overview-content"></div>
+    </div>
+
     <!-- ── TEXT NOTES TAB ── -->
-    <div class="notes-tab-panel active" id="notes-panel-text">
+    <div class="notes-tab-panel" id="notes-panel-text">
       <textarea
         id="notes-text-area"
         class="notes-textarea"
