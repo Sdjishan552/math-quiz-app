@@ -6,7 +6,7 @@
    + PDF Performance Report Export (jsPDF + Chart.js)
    + Dark mode ONLY (bluish theme)
    ============================================================ */
- 
+
 // ── Subject config ─────────────────────────────────────────
 const SUBJECTS = {
   maths: {
@@ -4156,8 +4156,11 @@ function openTopicNotes(topic) {
   // Load Drive tab
   renderDriveLink();
 
-  // Switch to first tab
-  switchNotesTab('text');
+  // Render overview tab
+  renderNotesOverview();
+
+  // Switch to overview tab
+  switchNotesTab('overview');
 
   document.getElementById('notes-modal').style.display = 'flex';
 }
@@ -4179,9 +4182,116 @@ function switchNotesTab(tab) {
   document.querySelectorAll('.notes-tab-panel').forEach(function(p) {
     p.classList.toggle('active', p.id === 'notes-panel-' + tab);
   });
+  if (tab === 'overview') renderNotesOverview();
 }
 
-// ── Text Notes ────────────────────────────────────────────
+// ── Overview Tab ──────────────────────────────────────────
+
+function renderNotesOverview() {
+  var container = document.getElementById('notes-overview-content');
+  if (!container || !_currentNote) return;
+
+  var note = _currentNote;
+  var html = '';
+
+  var hasText   = note.text && note.text.trim().length > 0;
+  var hasImages = note.images && note.images.length > 0;
+  var hasPdfs   = note.pdfs && note.pdfs.length > 0;
+  var hasDrive  = note.driveLink && note.driveLink.trim().length > 0;
+  var hasAny    = hasText || hasImages || hasPdfs || hasDrive;
+
+  if (!hasAny) {
+    html = '<div class="notes-overview-empty">' +
+      '<div class="notes-overview-empty-icon">📭</div>' +
+      '<div class="notes-overview-empty-title">Nothing here yet</div>' +
+      '<div class="notes-overview-empty-hint">Use the tabs above to add notes, photos, PDFs, or a Drive link for this topic.</div>' +
+    '</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  // ── Text Notes Section ──
+  if (hasText) {
+    html += '<div class="nov-section">' +
+      '<div class="nov-section-header">' +
+        '<span class="nov-section-icon">✏️</span>' +
+        '<span class="nov-section-title">Written Notes</span>' +
+      '</div>' +
+      '<div class="nov-text-body">' + escHtml(note.text).replace(/\n/g, '<br>') + '</div>' +
+    '</div>';
+  }
+
+  // ── Images Section ──
+  if (hasImages) {
+    var imgItems = note.images.map(function(img, i) {
+      return '<div class="nov-img-item" onclick="openNoteImageFull(' + i + ')">' +
+        '<img src="' + img.data + '" alt="' + escHtml(img.name) + '" class="nov-img-thumb" />' +
+        '<div class="nov-img-label">' + escHtml(img.name.length > 22 ? img.name.slice(0, 20) + '…' : img.name) + '</div>' +
+      '</div>';
+    }).join('');
+    html += '<div class="nov-section">' +
+      '<div class="nov-section-header">' +
+        '<span class="nov-section-icon">📷</span>' +
+        '<span class="nov-section-title">Photos</span>' +
+        '<span class="nov-section-count">' + note.images.length + '</span>' +
+      '</div>' +
+      '<div class="nov-img-grid">' + imgItems + '</div>' +
+    '</div>';
+  }
+
+  // ── PDFs Section ──
+  if (hasPdfs) {
+    var pdfItems = note.pdfs.map(function(pdf, i) {
+      var kb = pdf.size ? (pdf.size / 1024).toFixed(1) + ' KB' : '';
+      return '<div class="nov-pdf-item">' +
+        '<div class="nov-pdf-left">' +
+          '<span class="nov-pdf-icon">📄</span>' +
+          '<div class="nov-pdf-info">' +
+            '<div class="nov-pdf-name">' + escHtml(pdf.name) + '</div>' +
+            (kb ? '<div class="nov-pdf-size">' + kb + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+        '<button class="nov-pdf-btn" onclick="openPdfViewer(' + i + ')">👁 View</button>' +
+      '</div>';
+    }).join('');
+    html += '<div class="nov-section">' +
+      '<div class="nov-section-header">' +
+        '<span class="nov-section-icon">📄</span>' +
+        '<span class="nov-section-title">PDF Documents</span>' +
+        '<span class="nov-section-count">' + note.pdfs.length + '</span>' +
+      '</div>' +
+      '<div class="nov-pdf-list">' + pdfItems + '</div>' +
+    '</div>';
+  }
+
+  // ── Drive Link Section ──
+  if (hasDrive) {
+    var linkLabel = note.driveLink.length > 50 ? note.driveLink.slice(0, 48) + '…' : note.driveLink;
+    var isDrive   = note.driveLink.includes('drive.google.com');
+    var isSlides  = note.driveLink.includes('presentation');
+    var isDocs    = note.driveLink.includes('document');
+    var driveIcon = isSlides ? '📊' : isDocs ? '📝' : '📂';
+    var driveType = isSlides ? 'Google Slides' : isDocs ? 'Google Docs' : isDrive ? 'Google Drive' : 'External Link';
+    html += '<div class="nov-section">' +
+      '<div class="nov-section-header">' +
+        '<span class="nov-section-icon">🔗</span>' +
+        '<span class="nov-section-title">Drive Link</span>' +
+      '</div>' +
+      '<a class="nov-drive-btn" href="' + escHtml(note.driveLink) + '" target="_blank" rel="noopener">' +
+        '<span class="nov-drive-btn-icon">' + driveIcon + '</span>' +
+        '<div class="nov-drive-btn-info">' +
+          '<span class="nov-drive-btn-type">' + driveType + '</span>' +
+          '<span class="nov-drive-btn-url">' + escHtml(linkLabel) + '</span>' +
+        '</div>' +
+        '<span class="nov-drive-btn-arrow">↗</span>' +
+      '</a>' +
+    '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+
 
 function updateNotesCharCount() {
   var ta = document.getElementById('notes-text-area');
@@ -4195,6 +4305,7 @@ function saveNotesText() {
   saveNoteForTopic(_currentNotesTopic, _currentNote);
   showToast('💾 Notes saved!');
   updateNotesHomeBadge();
+  renderNotesOverview();
 }
 
 // ── Images ────────────────────────────────────────────────
@@ -4216,6 +4327,7 @@ function handleNoteImages(files) {
         renderNoteImages();
         showToast('📷 ' + loaded + ' photo' + (loaded > 1 ? 's' : '') + ' saved!');
         updateNotesHomeBadge();
+        renderNotesOverview();
       }
     };
     reader.readAsDataURL(file);
@@ -4255,6 +4367,7 @@ function deleteNoteImage(idx) {
   renderNoteImages();
   showToast('Image removed.');
   updateNotesHomeBadge();
+  renderNotesOverview();
 }
 
 // ── PDFs ──────────────────────────────────────────────────
@@ -4274,6 +4387,7 @@ function handleNotePdf(file) {
     renderNotePdfs();
     showToast('📄 PDF saved!');
     updateNotesHomeBadge();
+    renderNotesOverview();
   };
   reader.readAsDataURL(file);
 }
@@ -4321,9 +4435,8 @@ function deleteNotePdf(idx) {
   renderNotePdfs();
   showToast('PDF removed.');
   updateNotesHomeBadge();
+  renderNotesOverview();
 }
-
-// ── Drive Link ────────────────────────────────────────────
 
 function saveDriveLink() {
   if (!_currentNotesTopic) return;
@@ -4333,6 +4446,7 @@ function saveDriveLink() {
   renderDriveLink();
   showToast(val ? '🔗 Drive link saved!' : 'Drive link cleared.');
   updateNotesHomeBadge();
+  renderNotesOverview();
 }
 
 function clearDriveLink() {
@@ -4343,6 +4457,7 @@ function clearDriveLink() {
   renderDriveLink();
   showToast('Drive link removed.');
   updateNotesHomeBadge();
+  renderNotesOverview();
 }
 
 function renderDriveLink() {
