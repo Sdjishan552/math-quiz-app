@@ -4415,18 +4415,106 @@ function renderNotePdfs() {
   }).join('');
 }
 
+/* ── PDF.js state ── */
+var _pdfJsDoc      = null;
+var _pdfCurrentPage = 1;
+var _pdfTotalPages  = 0;
+
 function openPdfViewer(idx) {
   if (!_currentNote || !_currentNote.pdfs || !_currentNote.pdfs[idx]) return;
   var pdf = _currentNote.pdfs[idx];
   document.getElementById('pdf-viewer-title').textContent = pdf.name;
-  document.getElementById('pdf-viewer-frame').src = pdf.data;
   document.getElementById('pdf-viewer-modal').style.display = 'flex';
+  document.getElementById('pdf-viewer-loading').style.display = 'flex';
+  document.getElementById('pdf-pages-container').innerHTML = '';
+  document.getElementById('pdf-viewer-nav').style.display = 'none';
+  document.getElementById('pdf-page-info').textContent = '';
+  _pdfJsDoc = null; _pdfCurrentPage = 1; _pdfTotalPages = 0;
+
+  /* Use PDF.js if available, else fall back to object embed */
+  if (window.pdfjsLib) {
+    var dataStr = pdf.data; // base64 data URL
+    var base64   = dataStr.split(',')[1];
+    var binary   = atob(base64);
+    var bytes    = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    pdfjsLib.getDocument({ data: bytes }).promise.then(function(doc) {
+      _pdfJsDoc     = doc;
+      _pdfTotalPages = doc.numPages;
+      _pdfCurrentPage = 1;
+      document.getElementById('pdf-viewer-loading').style.display = 'none';
+      _renderAllPdfPages(doc);
+      _updatePdfNav();
+    }).catch(function(err) {
+      document.getElementById('pdf-viewer-loading').innerHTML = '<span style="color:var(--red)">❌ Failed to load PDF</span>';
+      console.error('PDF.js error:', err);
+    });
+  } else {
+    /* Fallback: object tag (renders natively without "Open" prompt on most Android) */
+    document.getElementById('pdf-viewer-loading').style.display = 'none';
+    var obj = document.createElement('object');
+    obj.setAttribute('data', pdf.data);
+    obj.setAttribute('type', 'application/pdf');
+    obj.style.cssText = 'width:100%;flex:1;min-height:0;border:none;border-radius:4px;';
+    obj.innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center">PDF preview not supported. <a href="' + pdf.data + '" download="' + escHtml(pdf.name) + '" style="color:var(--purple)">Download</a></p>';
+    document.getElementById('pdf-pages-container').appendChild(obj);
+  }
+}
+
+function _renderAllPdfPages(doc) {
+  var container = document.getElementById('pdf-pages-container');
+  container.innerHTML = '';
+  var scale = Math.min(1.6, (window.innerWidth - 40) / 595);
+  for (var p = 1; p <= doc.numPages; p++) {
+    (function(pageNum) {
+      doc.getPage(pageNum).then(function(page) {
+        var viewport = page.getViewport({ scale: scale });
+        var canvas   = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+        container.appendChild(canvas);
+        page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport });
+      });
+    })(p);
+  }
+  document.getElementById('pdf-page-info').textContent = doc.numPages + ' page' + (doc.numPages !== 1 ? 's' : '');
+}
+
+function _updatePdfNav() {
+  /* For large docs we show prev/next instead of all pages at once (>12 pages) */
+  if (_pdfTotalPages > 12) {
+    document.getElementById('pdf-viewer-nav').style.display = 'flex';
+    document.getElementById('pdf-nav-label').textContent = 'Page ' + _pdfCurrentPage + ' of ' + _pdfTotalPages;
+    document.getElementById('pdf-prev-btn').disabled = _pdfCurrentPage <= 1;
+    document.getElementById('pdf-next-btn').disabled = _pdfCurrentPage >= _pdfTotalPages;
+  }
+}
+
+function _renderSinglePdfPage(pageNum) {
+  if (!_pdfJsDoc) return;
+  var container = document.getElementById('pdf-pages-container');
+  container.innerHTML = '';
+  var scale = Math.min(1.6, (window.innerWidth - 40) / 595);
+  _pdfJsDoc.getPage(pageNum).then(function(page) {
+    var viewport = page.getViewport({ scale: scale });
+    var canvas   = document.createElement('canvas');
+    canvas.className = 'pdf-page-canvas';
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    container.appendChild(canvas);
+    page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport });
+    container.scrollIntoView({ behavior: 'smooth' });
+  });
 }
 
 function closePdfViewer() {
   document.getElementById('pdf-viewer-modal').style.display = 'none';
-  document.getElementById('pdf-viewer-frame').src = '';
+  document.getElementById('pdf-pages-container').innerHTML = '';
+  _pdfJsDoc = null;
 }
+
 
 function deleteNotePdf(idx) {
   if (!_currentNotesTopic || !_currentNote) return;
@@ -4544,6 +4632,21 @@ function bindNotesEvents() {
   if (pdfViewerClose) pdfViewerClose.addEventListener('click', closePdfViewer);
   var pdfViewerOverlay = document.getElementById('pdf-viewer-modal');
   if (pdfViewerOverlay) pdfViewerOverlay.addEventListener('click', function(e) { if (e.target === pdfViewerOverlay) closePdfViewer(); });
+  // PDF page navigation (for large docs)
+  var pdfPrev = document.getElementById('pdf-prev-btn');
+  var pdfNext = document.getElementById('pdf-next-btn');
+  if (pdfPrev) pdfPrev.addEventListener('click', function() {
+    if (!_pdfJsDoc || _pdfCurrentPage <= 1) return;
+    _pdfCurrentPage--;
+    _renderSinglePdfPage(_pdfCurrentPage);
+    _updatePdfNav();
+  });
+  if (pdfNext) pdfNext.addEventListener('click', function() {
+    if (!_pdfJsDoc || _pdfCurrentPage >= _pdfTotalPages) return;
+    _pdfCurrentPage++;
+    _renderSinglePdfPage(_pdfCurrentPage);
+    _updatePdfNav();
+  });
 }
 
 // ══════════════════════════════════════════════════════════
