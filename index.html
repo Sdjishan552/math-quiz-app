@@ -207,7 +207,17 @@
     </div>
 
     <button class="btn btn-notes-home" id="btn-notes">
-      📝 Topic Notes <span class="weak-badge notes-count-badge" id="notes-count-badge">0 topics</span>
+      <span class="btn-notes-left">
+        <span class="btn-notes-icon-wrap">📝</span>
+        <span class="btn-notes-label-wrap">
+          <span class="btn-notes-title">Topic Notes</span>
+          <span class="btn-notes-sub">Formulas · Cheatsheets · PDFs</span>
+        </span>
+      </span>
+      <span class="btn-notes-right">
+        <span class="weak-badge notes-count-badge" id="notes-count-badge">0 topics</span>
+        <span class="btn-notes-arrow">›</span>
+      </span>
     </button>
 
   </section>
@@ -299,6 +309,9 @@
     <!-- Next / Don't Know row -->
     <div class="quiz-action-row">
       <button class="btn btn-skip" id="btn-skip">❓ Don't Know</button>
+      <button class="btn btn-submit-answer" id="btn-submit-answer" style="display:none">
+        ✅ Submit Answer
+      </button>
       <button class="btn btn-primary" id="btn-next" style="display:none">
         Next Question →
       </button>
@@ -537,11 +550,28 @@
       <span class="notes-subject-badge" id="notes-subject-badge">Maths</span>
     </div>
 
-    <p class="notes-screen-hint">Tap any topic to add notes, photos, PDFs or a Drive link.</p>
+    <!-- Progress strip -->
+    <div class="notes-progress-strip">
+      <div class="notes-progress-bar-track">
+        <div class="notes-progress-bar-fill" id="notes-progress-bar-fill" style="width:0%"></div>
+      </div>
+      <span class="notes-progress-label" id="notes-progress-label">0 / 0 topics noted</span>
+    </div>
 
-    <!-- Search bar for topics -->
-    <div class="notes-search-wrap">
-      <input type="text" id="notes-topic-search" class="notes-topic-search" placeholder="🔍 Search topics…" autocomplete="off" />
+    <!-- Search + Sort row -->
+    <div class="notes-search-sort-row">
+      <div class="notes-search-wrap" style="flex:1;margin:0">
+        <input type="text" id="notes-topic-search" class="notes-topic-search" placeholder="🔍 Search topics…" autocomplete="off" />
+      </div>
+      <div class="notes-sort-wrap">
+        <select id="notes-sort-select" class="notes-sort-select">
+          <option value="az">A–Z</option>
+          <option value="pinned">📌 Pinned</option>
+          <option value="recent">🕒 Recent</option>
+          <option value="hasnotes">✅ Has Notes</option>
+          <option value="color">🎨 Color</option>
+        </select>
+      </div>
     </div>
 
     <div id="notes-topic-list" class="notes-topic-list"></div>
@@ -646,7 +676,23 @@
           <div class="notes-modal-sub" id="notes-modal-subject-label">Maths</div>
         </div>
       </div>
-      <button class="notes-modal-close" id="btn-notes-modal-close">✕</button>
+      <!-- Pin + Color tag + Close -->
+      <div class="notes-modal-header-actions">
+        <button class="notes-pin-btn" id="notes-pin-btn" title="Pin this topic">📌</button>
+        <div class="notes-color-wrap">
+          <button class="notes-color-btn" id="notes-color-btn" title="Tag color">🎨</button>
+          <div class="notes-color-picker" id="notes-color-picker" style="display:none">
+            <button class="ncp-swatch" data-color="" title="None">✕</button>
+            <button class="ncp-swatch" data-color="red"    style="background:#ff4f4f"></button>
+            <button class="ncp-swatch" data-color="orange" style="background:#ff9a2e"></button>
+            <button class="ncp-swatch" data-color="yellow" style="background:#ffe033"></button>
+            <button class="ncp-swatch" data-color="green"  style="background:#39ff8a"></button>
+            <button class="ncp-swatch" data-color="cyan"   style="background:#00d4ff"></button>
+            <button class="ncp-swatch" data-color="purple" style="background:#a259ff"></button>
+          </div>
+        </div>
+        <button class="notes-modal-close" id="btn-notes-modal-close">✕</button>
+      </div>
     </div>
 
     <!-- Tab bar -->
@@ -673,7 +719,9 @@
       ></textarea>
       <div class="notes-text-actions">
         <span class="notes-char-count" id="notes-char-count">0 chars</span>
-        <button class="btn btn-notes-save" id="btn-save-notes-text">💾 Save Notes</button>
+        <span class="notes-autosave-indicator" id="notes-autosave-indicator"></span>
+        <button class="btn-notes-copy" id="btn-copy-notes-text" title="Copy to clipboard">📋 Copy</button>
+        <button class="btn btn-notes-save" id="btn-save-notes-text">💾 Save</button>
       </div>
     </div>
 
@@ -888,6 +936,23 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- QUICK NOTE POPUP (long-press on topic card)           -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="quicknote-overlay" id="quicknote-overlay" style="display:none">
+  <div class="quicknote-box">
+    <div class="quicknote-header">
+      <span class="quicknote-title" id="quicknote-topic-name">Quick Note</span>
+      <button class="quicknote-close" id="quicknote-close">✕</button>
+    </div>
+    <textarea class="quicknote-textarea" id="quicknote-textarea" placeholder="Jot a quick reminder…" rows="4"></textarea>
+    <div class="quicknote-footer">
+      <button class="quicknote-btn-full" id="quicknote-open-full">📝 Open Full Notes</button>
+      <button class="quicknote-btn-save" id="quicknote-save">💾 Save</button>
+    </div>
+  </div>
+</div>
 
 
 
