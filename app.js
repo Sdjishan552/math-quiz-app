@@ -1657,6 +1657,8 @@ function bindEvents() {
 
   // Quiz
   document.getElementById('btn-next').addEventListener('click', nextQuestion);
+  var submitAnswerBtn = document.getElementById('btn-submit-answer');
+  if (submitAnswerBtn) submitAnswerBtn.addEventListener('click', confirmSubmitAnswer);
   var skipBtnEl = document.getElementById('btn-skip');
   if (skipBtnEl) skipBtnEl.addEventListener('click', skipQuestion);
   document.getElementById('btn-home').addEventListener('click', function() { stopTimer(); showScreen('home'); });
@@ -1859,12 +1861,16 @@ function loadQuestion() {
     var btn = document.createElement('button');
     btn.className   = 'option-btn';
     btn.textContent = opt;
-    btn.addEventListener('click', function() { selectOption(opt, btn); });
+    btn.addEventListener('click', function() { highlightOption(opt, btn); });
     container.appendChild(btn);
   });
 
   document.getElementById('feedback').style.display  = 'none';
   document.getElementById('btn-next').style.display  = 'none';
+
+  // Hide submit button until an option is selected
+  var submitBtn = document.getElementById('btn-submit-answer');
+  if (submitBtn) submitBtn.style.display = 'none';
 
   // Don't Know button: visible only when no answer yet
   var skipBtn = document.getElementById('btn-skip');
@@ -1874,9 +1880,39 @@ function loadQuestion() {
   }
 }
 
+var _pendingAnswer    = null;   // text of selected option
+var _pendingAnswerBtn = null;   // DOM button element
+
+function highlightOption(selected, btn) {
+  // If answer already graded, ignore taps
+  if (document.getElementById('btn-next').style.display === 'flex') return;
+
+  // Clear previous highlight
+  document.querySelectorAll('.option-btn').forEach(function(b) {
+    b.classList.remove('selected-pending');
+  });
+
+  _pendingAnswer    = selected;
+  _pendingAnswerBtn = btn;
+  btn.classList.add('selected-pending');
+
+  // Show the Submit button
+  var submitBtn = document.getElementById('btn-submit-answer');
+  if (submitBtn) submitBtn.style.display = 'flex';
+}
+
+function confirmSubmitAnswer() {
+  if (!_pendingAnswer || !_pendingAnswerBtn) return;
+  selectOption(_pendingAnswer, _pendingAnswerBtn);
+  _pendingAnswer    = null;
+  _pendingAnswerBtn = null;
+  var submitBtn = document.getElementById('btn-submit-answer');
+  if (submitBtn) submitBtn.style.display = 'none';
+}
+
 function selectOption(selected, btn) {
   var optBtns = document.querySelectorAll('.option-btn');
-  optBtns.forEach(function(b) { b.disabled = true; });
+  optBtns.forEach(function(b) { b.disabled = true; b.classList.remove('selected-pending'); });
 
   var isCorrect = selected === currentQ.correct;
   attempted++;
@@ -1905,6 +1941,8 @@ function selectOption(selected, btn) {
   if (skipBtn) skipBtn.style.display = 'none';
 
   sessionIndex++;
+  saveResumeSnapshot();
+}
   saveResumeSnapshot();
 }
 
@@ -4039,7 +4077,7 @@ function saveAllNotes(data) {
 
 function getNoteForTopic(topic) {
   var all = loadAllNotes();
-  return all[topic] || { text: '', images: [], pdfs: [], driveLink: '' };
+  return all[topic] || { text: '', images: [], pdfs: [], driveLink: '', pinned: false, color: '', lastEdited: null };
 }
 
 function saveNoteForTopic(topic, note) {
@@ -4068,11 +4106,14 @@ function showNotesScreen() {
 
   if (topics.length === 0) {
     list.innerHTML = '';
-    empty.style.display = 'flex';
+    if (empty) empty.style.display = 'flex';
   } else {
-    empty.style.display = 'none';
+    if (empty) empty.style.display = 'none';
     renderNotesTopicList(topics);
   }
+
+  // Progress strip
+  updateNotesProgressStrip(topics);
 
   // Search filter
   var search = document.getElementById('notes-topic-search');
@@ -4086,20 +4127,96 @@ function showNotesScreen() {
     };
   }
 
+  // Sort
+  var sortSel = document.getElementById('notes-sort-select');
+  if (sortSel) {
+    sortSel.onchange = function() { renderNotesTopicList(topics); };
+  }
+
   showScreen('notes');
   updateNotesHomeBadge();
 }
 
+function updateNotesProgressStrip(topics) {
+  var allNotes = loadAllNotes();
+  var noted = topics.filter(function(t) {
+    var n = allNotes[t] || {};
+    return (n.text && n.text.trim()) || (n.images && n.images.length) || (n.pdfs && n.pdfs.length) || (n.driveLink && n.driveLink.trim());
+  }).length;
+  var total = topics.length;
+  var pct = total > 0 ? Math.round(noted / total * 100) : 0;
+  var fill = document.getElementById('notes-progress-bar-fill');
+  var label = document.getElementById('notes-progress-label');
+  if (fill)  fill.style.width = pct + '%';
+  if (label) label.textContent = noted + ' / ' + total + ' topics noted (' + pct + '%)';
+}
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  var diff = Date.now() - ts;
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return hrs + 'h ago';
+  var days = Math.floor(hrs / 24);
+  if (days < 30) return days + 'd ago';
+  return Math.floor(days / 30) + 'mo ago';
+}
+
+var COLOR_MAP = {
+  red:    '#ff4f4f', orange: '#ff9a2e', yellow: '#ffe033',
+  green:  '#39ff8a', cyan:   '#00d4ff', purple: '#a259ff'
+};
+
 function renderNotesTopicList(topics) {
   var allNotes = loadAllNotes();
   var list = document.getElementById('notes-topic-list');
-  list.innerHTML = topics.map(function(topic) {
+  var sortVal = (document.getElementById('notes-sort-select') || {}).value || 'az';
+
+  // Sort
+  var sorted = topics.slice();
+  if (sortVal === 'pinned') {
+    sorted.sort(function(a,b) {
+      var pa = (allNotes[a]||{}).pinned ? 0 : 1;
+      var pb = (allNotes[b]||{}).pinned ? 0 : 1;
+      return pa - pb || a.localeCompare(b);
+    });
+  } else if (sortVal === 'recent') {
+    sorted.sort(function(a,b) {
+      return ((allNotes[b]||{}).lastEdited||0) - ((allNotes[a]||{}).lastEdited||0);
+    });
+  } else if (sortVal === 'hasnotes') {
+    sorted.sort(function(a,b) {
+      var na = allNotes[a]||{}, nb = allNotes[b]||{};
+      var ha = (na.text&&na.text.trim())||(na.images&&na.images.length)||(na.pdfs&&na.pdfs.length)||(na.driveLink&&na.driveLink.trim()) ? 0 : 1;
+      var hb = (nb.text&&nb.text.trim())||(nb.images&&nb.images.length)||(nb.pdfs&&nb.pdfs.length)||(nb.driveLink&&nb.driveLink.trim()) ? 0 : 1;
+      return ha - hb || a.localeCompare(b);
+    });
+  } else if (sortVal === 'color') {
+    var colorOrder = ['red','orange','yellow','green','cyan','purple',''];
+    sorted.sort(function(a,b) {
+      var ca = colorOrder.indexOf((allNotes[a]||{}).color||'');
+      var cb = colorOrder.indexOf((allNotes[b]||{}).color||'');
+      if (ca < 0) ca = colorOrder.length;
+      if (cb < 0) cb = colorOrder.length;
+      return ca - cb || a.localeCompare(b);
+    });
+  }
+
+  list.innerHTML = sorted.map(function(topic) {
     var note = allNotes[topic] || {};
-    var hasText   = note.text && note.text.trim();
-    var hasImgs   = note.images && note.images.length > 0;
-    var hasPdfs   = note.pdfs && note.pdfs.length > 0;
-    var hasDrive  = note.driveLink && note.driveLink.trim();
-    var hasAny    = hasText || hasImgs || hasPdfs || hasDrive;
+    var hasText  = note.text && note.text.trim();
+    var hasImgs  = note.images && note.images.length > 0;
+    var hasPdfs  = note.pdfs && note.pdfs.length > 0;
+    var hasDrive = note.driveLink && note.driveLink.trim();
+    var hasAny   = hasText || hasImgs || hasPdfs || hasDrive;
+    var isPinned = !!note.pinned;
+    var color    = note.color || '';
+    var editTime = _timeAgo(note.lastEdited);
+
+    var colorDot = color ? '<span class="notes-topic-color-dot" style="background:' + (COLOR_MAP[color]||'#fff') + '"></span>' : '';
+    var pinStar  = isPinned ? '<span class="notes-topic-pin-star">📌</span>' : '';
 
     var badges = '';
     if (hasText)  badges += '<span class="note-badge note-badge-text">✏️ Notes</span>';
@@ -4108,11 +4225,15 @@ function renderNotesTopicList(topics) {
     if (hasDrive) badges += '<span class="note-badge note-badge-drive">🔗 Drive</span>';
 
     var qCount = allQuestions.filter(function(q) { return q.topic === topic; }).length;
+    var safeT  = escHtml(topic).replace(/'/g, "\\'");
 
-    return '<div class="notes-topic-card ' + (hasAny ? 'has-notes' : '') + '" data-topic="' + escHtml(topic) + '" onclick="openTopicNotes(\'' + escHtml(topic).replace(/'/g, "\\'") + '\')">' +
+    return '<div class="notes-topic-card ' + (hasAny ? 'has-notes' : '') + (isPinned ? ' is-pinned' : '') + '" data-topic="' + escHtml(topic) + '" onclick="openTopicNotes(\'' + safeT + '\')">' +
       '<div class="notes-topic-card-left">' +
-        '<div class="notes-topic-card-name">' + escHtml(topic) + '</div>' +
+        '<div class="notes-topic-card-name" style="display:flex;align-items:center;gap:5px">' +
+          colorDot + pinStar + escHtml(topic) +
+        '</div>' +
         '<div class="notes-topic-card-meta">' + qCount + ' question' + (qCount !== 1 ? 's' : '') + (hasAny ? '' : ' · No notes yet') + '</div>' +
+        (editTime && hasAny ? '<div class="notes-topic-edit-time">🕒 ' + editTime + '</div>' : '') +
       '</div>' +
       '<div class="notes-topic-card-right">' +
         (badges || '<span class="note-badge note-badge-empty">+ Add</span>') +
@@ -4120,6 +4241,21 @@ function renderNotesTopicList(topics) {
       '</div>' +
     '</div>';
   }).join('');
+
+  // Attach long-press listeners
+  document.querySelectorAll('.notes-topic-card').forEach(function(card) {
+    var pressTimer;
+    card.addEventListener('touchstart', function(e) {
+      pressTimer = setTimeout(function() {
+        openQuickNote(card.dataset.topic);
+      }, 600);
+    }, { passive: true });
+    card.addEventListener('touchend',   function() { clearTimeout(pressTimer); });
+    card.addEventListener('touchmove',  function() { clearTimeout(pressTimer); });
+    card.addEventListener('mousedown',  function() { pressTimer = setTimeout(function() { openQuickNote(card.dataset.topic); }, 600); });
+    card.addEventListener('mouseup',    function() { clearTimeout(pressTimer); });
+    card.addEventListener('mouseleave', function() { clearTimeout(pressTimer); });
+  });
 }
 
 function updateNotesHomeBadge() {
@@ -4137,10 +4273,25 @@ var _currentNote       = null;
 function openTopicNotes(topic) {
   _currentNotesTopic = topic;
   _currentNote = getNoteForTopic(topic);
+  // Close quick note if open
+  closeQuickNote();
 
   document.getElementById('notes-modal-topic-name').textContent = topic;
   var cfg = SUBJECTS[activeSubject];
   document.getElementById('notes-modal-subject-label').textContent = cfg ? (cfg.icon + ' ' + cfg.label.replace('Quiz', '')) : activeSubject;
+
+  // Pin button state
+  var pinBtn = document.getElementById('notes-pin-btn');
+  if (pinBtn) {
+    pinBtn.classList.toggle('active', !!_currentNote.pinned);
+    pinBtn.title = _currentNote.pinned ? 'Unpin topic' : 'Pin topic';
+  }
+
+  // Color picker — mark selected swatch
+  _syncColorPicker(_currentNote.color || '');
+  // Hide picker
+  var picker = document.getElementById('notes-color-picker');
+  if (picker) picker.style.display = 'none';
 
   // Load text tab
   var ta = document.getElementById('notes-text-area');
@@ -4299,13 +4450,37 @@ function updateNotesCharCount() {
   if (ta && count) count.textContent = ta.value.length + ' chars';
 }
 
-function saveNotesText() {
+var _autoSaveTimer = null;
+
+function saveNotesText(silent) {
   if (!_currentNotesTopic) return;
   _currentNote.text = document.getElementById('notes-text-area').value;
+  _currentNote.lastEdited = Date.now();
   saveNoteForTopic(_currentNotesTopic, _currentNote);
-  showToast('💾 Notes saved!');
+  if (!silent) {
+    showToast('💾 Notes saved!');
+  } else {
+    var ind = document.getElementById('notes-autosave-indicator');
+    if (ind) { ind.textContent = '✓ Auto-saved'; ind.classList.add('show'); setTimeout(function() { ind.classList.remove('show'); }, 2000); }
+  }
   updateNotesHomeBadge();
   renderNotesOverview();
+}
+
+function scheduleAutoSave() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(function() { saveNotesText(true); }, 1500);
+}
+
+function copyNotesText() {
+  var ta = document.getElementById('notes-text-area');
+  if (!ta || !ta.value.trim()) { showToast('Nothing to copy!'); return; }
+  navigator.clipboard.writeText(ta.value).then(function() {
+    showToast('📋 Copied to clipboard!');
+  }).catch(function() {
+    ta.select(); document.execCommand('copy');
+    showToast('📋 Copied!');
+  });
 }
 
 // ── Images ────────────────────────────────────────────────
@@ -4428,6 +4603,7 @@ function closePdfViewer() {
   document.getElementById('pdf-viewer-frame').src = '';
 }
 
+
 function deleteNotePdf(idx) {
   if (!_currentNotesTopic || !_currentNote) return;
   _currentNote.pdfs.splice(idx, 1);
@@ -4484,6 +4660,75 @@ function renderDriveLink() {
   }
 }
 
+
+// ── Quick Note Popup ─────────────────────────────────────────────────────
+
+var _quickNoteTopic = null;
+
+function openQuickNote(topic) {
+  _quickNoteTopic = topic;
+  var note = getNoteForTopic(topic);
+  var el = document.getElementById('quicknote-overlay');
+  var ta = document.getElementById('quicknote-textarea');
+  var ttl = document.getElementById('quicknote-topic-name');
+  if (!el || !ta) return;
+  ttl.textContent = '⚡ ' + topic;
+  ta.value = note.text || '';
+  el.style.display = 'flex';
+  setTimeout(function() { ta.focus(); }, 100);
+}
+
+function closeQuickNote() {
+  var el = document.getElementById('quicknote-overlay');
+  if (el) el.style.display = 'none';
+  _quickNoteTopic = null;
+}
+
+function saveQuickNote() {
+  if (!_quickNoteTopic) return;
+  var ta = document.getElementById('quicknote-textarea');
+  var note = getNoteForTopic(_quickNoteTopic);
+  note.text = ta.value;
+  note.lastEdited = Date.now();
+  saveNoteForTopic(_quickNoteTopic, note);
+  showToast('⚡ Quick note saved!');
+  closeQuickNote();
+  var topics = Array.from(new Set(allQuestions.map(function(q) { return q.topic; }))).sort();
+  renderNotesTopicList(topics);
+  updateNotesProgressStrip(topics);
+  updateNotesHomeBadge();
+}
+
+function togglePinTopic() {
+  if (!_currentNotesTopic || !_currentNote) return;
+  _currentNote.pinned = !_currentNote.pinned;
+  _currentNote.lastEdited = Date.now();
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  var pinBtn = document.getElementById('notes-pin-btn');
+  if (pinBtn) {
+    pinBtn.classList.toggle('active', _currentNote.pinned);
+    pinBtn.title = _currentNote.pinned ? 'Unpin topic' : 'Pin topic';
+  }
+  showToast(_currentNote.pinned ? '📌 Topic pinned!' : '📌 Unpinned');
+}
+
+function _syncColorPicker(color) {
+  document.querySelectorAll('.ncp-swatch').forEach(function(sw) {
+    sw.classList.toggle('selected', sw.dataset.color === color);
+  });
+}
+
+function setTopicColor(color) {
+  if (!_currentNotesTopic || !_currentNote) return;
+  _currentNote.color = color;
+  _currentNote.lastEdited = Date.now();
+  saveNoteForTopic(_currentNotesTopic, _currentNote);
+  _syncColorPicker(color);
+  var picker = document.getElementById('notes-color-picker');
+  if (picker) picker.style.display = 'none';
+  showToast(color ? '🎨 Color tag set!' : '🎨 Color removed');
+}
+
 // ── Bind Notes Events ─────────────────────────────────────
 
 function bindNotesEvents() {
@@ -4507,10 +4752,6 @@ function bindNotesEvents() {
   document.querySelectorAll('.notes-tab').forEach(function(tab) {
     tab.addEventListener('click', function() { switchNotesTab(tab.dataset.tab); });
   });
-
-  // Text area typing
-  var ta = document.getElementById('notes-text-area');
-  if (ta) ta.addEventListener('input', updateNotesCharCount);
 
   // Save text button
   var saveTextBtn = document.getElementById('btn-save-notes-text');
@@ -4538,6 +4779,46 @@ function bindNotesEvents() {
   // Drive input — save on Enter
   var driveInput = document.getElementById('notes-drive-input');
   if (driveInput) driveInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') saveDriveLink(); });
+
+  // Auto-save on typing
+  var taNotes = document.getElementById('notes-text-area');
+  if (taNotes) taNotes.addEventListener('input', function() { updateNotesCharCount(); scheduleAutoSave(); });
+
+  // Copy notes button
+  var copyBtn = document.getElementById('btn-copy-notes-text');
+  if (copyBtn) copyBtn.addEventListener('click', copyNotesText);
+
+  // Pin button
+  var pinBtn = document.getElementById('notes-pin-btn');
+  if (pinBtn) pinBtn.addEventListener('click', togglePinTopic);
+
+  // Color button — toggle picker
+  var colorBtn = document.getElementById('notes-color-btn');
+  var colorPicker = document.getElementById('notes-color-picker');
+  if (colorBtn && colorPicker) {
+    colorBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      colorPicker.style.display = colorPicker.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.addEventListener('click', function() { if (colorPicker) colorPicker.style.display = 'none'; });
+  }
+  document.querySelectorAll('.ncp-swatch').forEach(function(sw) {
+    sw.addEventListener('click', function(e) { e.stopPropagation(); setTopicColor(sw.dataset.color); });
+  });
+
+  // Quick note popup listeners
+  var qnClose = document.getElementById('quicknote-close');
+  if (qnClose) qnClose.addEventListener('click', closeQuickNote);
+  var qnSave = document.getElementById('quicknote-save');
+  if (qnSave) qnSave.addEventListener('click', saveQuickNote);
+  var qnFull = document.getElementById('quicknote-open-full');
+  if (qnFull) qnFull.addEventListener('click', function() {
+    var t = _quickNoteTopic;
+    closeQuickNote();
+    if (t) openTopicNotes(t);
+  });
+  var qnOverlay = document.getElementById('quicknote-overlay');
+  if (qnOverlay) qnOverlay.addEventListener('click', function(e) { if (e.target === qnOverlay) closeQuickNote(); });
 
   // PDF viewer close
   var pdfViewerClose = document.getElementById('btn-pdf-viewer-close');
