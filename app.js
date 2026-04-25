@@ -714,7 +714,7 @@ function handleFileUpload(files) {
 }
 
 function restoreFullBackup(snapshot) {
-  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks'];
+  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks', 'topic_notes'];
   var subjects    = ['maths', 'reasoning'];
   var restored    = 0;
 
@@ -1163,7 +1163,7 @@ function showExportChoiceModal() {
     'background:var(--surface2);border:1px solid var(--violet);border-radius:12px;',
     'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
     '<div style="font-size:1rem;margin-bottom:3px">💾 All App Data</div>',
-    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions + all statistics for both subjects — full restore</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions + stats + topic notes (text, images, PDFs, links) — full restore</div>',
     '</button>',
 
     '<button id="exp-cancel-btn" style="width:100%;padding:10px;',
@@ -1203,7 +1203,7 @@ function doExportSubjectData() {
 }
 
 function doExportAllData() {
-  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks'];
+  var subjectKeys = ['question_bank', 'bank_meta', 'github_url', 'session_history', 'weak_stats', 'bookmarks', 'topic_notes'];
   var subjects    = ['maths', 'reasoning'];
   var snapshot    = { _type: 'quizpwa_full_backup', _date: getTodayStr(), perSubject: {}, global: {} };
 
@@ -1237,7 +1237,7 @@ function doExportAllData() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('✅ Full backup exported!');
-  showUploadResult('success', '✅ Full app backup exported', 'File: ' + filename + ' · Includes all stats & questions for both subjects');
+  showUploadResult('success', '✅ Full app backup exported', 'File: ' + filename + ' · Includes questions, stats, and topic notes (text, images, PDFs, links) for both subjects');
 }
 
 function getTodayStr() {
