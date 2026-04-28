@@ -871,8 +871,8 @@ function showClearChoiceModal() {
     '<button id="clr-stats-btn" style="width:100%;padding:14px 16px;margin-bottom:12px;',
     'background:var(--surface2);border:1px solid var(--yellow,#f5a623);border-radius:12px;',
     'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
-    '<div style="font-size:1rem;margin-bottom:3px">🧹 All Data Except Questions</div>',
-    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete stats, history, weak list, bookmarks & XP — questions are kept safe.</div>',
+    '<div style="font-size:1rem;margin-bottom:3px">🧹 All Data Except Questions & Notes</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Delete stats, history, weak list, bookmarks & XP — questions and notes (all categories, links, PDFs, writing) are kept safe.</div>',
     '</button>',
 
     '<button id="clr-all-btn" style="width:100%;padding:14px 16px;margin-bottom:20px;',
@@ -902,7 +902,7 @@ function showClearChoiceModal() {
     clearMode = 'stats';
     clearConfirmStep = 1;
     updateClearBtnLabel();
-    showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL stats, history, weak list, bookmarks & XP for BOTH subjects. Questions are safe. Tap 4 more times to confirm.');
+    showUploadResult('partial', '⚠️ Step 1 of 4 — Are you sure?', 'This will delete ALL stats, history, weak list, bookmarks & XP for BOTH subjects. Questions and notes are safe. Tap 4 more times to confirm.');
   };
   document.getElementById('clr-all-btn').onclick = function() {
     modal.remove();
@@ -990,8 +990,8 @@ function _execClearStats() {
   updateXPBar();
   updateReportsBadge();
   updateHomeStats();
-  showUploadResult('success', '✅ All stats, history, weak list, bookmarks & XP cleared. Your questions are untouched.');
-  showToast('Stats cleared. Questions are safe!');
+  showUploadResult('success', '✅ All stats, history, weak list, bookmarks & XP cleared. Your questions and notes are untouched.');
+  showToast('Stats cleared. Questions & notes are safe!');
 }
 
 function _execClearAll() {
