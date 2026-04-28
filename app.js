@@ -2591,109 +2591,67 @@ async function downloadSnapshotReport(reportId) {
   }
 }
 
-/* Build a PDF from a stored snapshot (simpler layout — no live charts) */
+/* Build a PDF from a stored snapshot — same full quality as the custom report */
 async function buildSnapshotPDF(report) {
+  var typeLabel = report.type === 'monthly' ? 'Monthly Auto-Report' : 'Weekly Auto-Report';
+  var genDate   = new Date(report.generatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  var reportLabel = typeLabel + ' · ' + genDate;
+
+  // Build a full-quality PDF for each subject present in the snapshot,
+  // using live analytics data (same data source as the custom report button).
+  // The report title/date is overridden to reflect the auto-report period.
+
+  var subjects = [];
+  if (report.snapMaths)     subjects.push('maths');
+  if (report.snapReasoning) subjects.push('reasoning');
+  if (subjects.length === 0) { showToast('No data in this report.'); return; }
+
+  var slug = report.type + '_' + new Date(report.generatedAt).toISOString().slice(0, 10);
+
+  if (subjects.length === 2) {
+    // Build combined report (same as "Include Combined" option)
+    await buildCombinedSnapshotReport(reportLabel, slug);
+  } else {
+    // Single subject
+    var data = getAnalyticsData(subjects[0]);
+    // Override label so the PDF header shows it's an auto-report
+    data.reportDate = reportLabel;
+    await buildPDF(data, subjects[0], 'QuizReport_' + slug + '.pdf');
+  }
+}
+
+/* Combined auto-report PDF — same full layout for both subjects */
+async function buildCombinedSnapshotReport(reportLabel, slug) {
+  var mathsData  = getAnalyticsData('maths');
+  var reasonData = getAnalyticsData('reasoning');
+
+  // Override report date label on both
+  mathsData.reportDate  = reportLabel;
+  reasonData.reportDate = reportLabel;
+
   var { jsPDF } = window.jspdf;
   var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  var pW = doc.internal.pageSize.getWidth();
-  var pH = doc.internal.pageSize.getHeight();
-  var margin = 12, contentW = pW - margin * 2;
+  var chartsM = await generateCharts(mathsData);
+  var chartsR = await generateCharts(reasonData);
 
-  var C = {
-    bg:      [11, 12, 26],
-    surface: [18, 20, 42],
-    surface2:[26, 29, 53],
-    border:  [42, 45, 80],
-    violet:  [162, 89, 255],
-    cyan:    [0, 212, 255],
-    lime:    [57, 255, 138],
-    pink:    [255, 79, 163],
-    orange:  [255, 122, 47],
-    yellow:  [255, 224, 51],
-    text:    [232, 234, 255],
-    muted:   [123, 128, 176],
-    white:   [255, 255, 255]
-  };
+  var C = getPalette();
+  var pW = 210, pH = 297, margin = 12, contentW = pW - margin * 2;
 
-  var typeLabel = report.type === 'monthly' ? 'Monthly Auto-Report' : 'Weekly Auto-Report';
-  var genDate   = new Date(report.generatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  // Page 1: Maths
+  await renderSubjectPage(doc, mathsData, chartsM, C, pW, pH, margin, contentW, 1, 4);
 
-  // Background
-  doc.setFillColor(...C.bg);
-  doc.rect(0, 0, pW, pH, 'F');
+  // Page 2: Reasoning
+  doc.addPage();
+  await renderSubjectPage(doc, reasonData, chartsR, C, pW, pH, margin, contentW, 2, 4);
 
-  // Header gradient bar
-  drawGradientBar(doc, 0, 0, pW, 26, C.violet, C.cyan);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(...C.bg);
-  doc.text('Quiz PWA — ' + typeLabel, margin, 17);
+  // Page 3: Comparison
+  doc.addPage();
+  renderComparisonPage(doc, mathsData, reasonData, C, pW, pH, margin, contentW);
 
-  var y = 34;
-
-  // Date line
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...C.muted);
-  doc.text('Auto-generated on: ' + genDate, margin, y); y += 10;
-
-  // ── Maths snapshot ──
-  if (report.snapMaths) {
-    y = renderSnapshotSubject(doc, '∑ Maths', report.snapMaths, C, margin, contentW, y, pW);
-    y += 8;
-  }
-
-  // ── Reasoning snapshot ──
-  if (report.snapReasoning) {
-    y = renderSnapshotSubject(doc, '🧩 Reasoning', report.snapReasoning, C, margin, contentW, y, pW);
-  }
-
-  // Footer
-  drawFooter(doc, 1, 1, pH, pW, C);
-
-  // Save
-  var slug = report.type + '_' + new Date(report.generatedAt).toISOString().slice(0, 10);
-  doc.save('QuizReport_' + slug + '.pdf');
-}
-
-function renderSnapshotSubject(doc, label, snap, C, margin, contentW, y, pW) {
-  // Section header
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...C.violet);
-  doc.text(label, margin, y); y += 4;
-  doc.setDrawColor(...C.border); doc.setLineWidth(0.3);
-  doc.line(margin, y, margin + contentW, y); y += 6;
-
-  // Stat boxes
-  var boxes = [
-    { label: 'Overall Accuracy', value: snap.overallAccuracy + '%', color: C.lime },
-    { label: 'Total Attempted',  value: '' + snap.totalAttempts,    color: C.cyan },
-    { label: 'Sessions',         value: '' + snap.totalSessions,    color: C.violet },
-    { label: 'Active Days',      value: '' + snap.activeDays,       color: C.orange },
-    { label: 'Weak Questions',   value: '' + snap.weakCount,        color: C.pink },
-    { label: 'Retention Score',  value: snap.retentionScore != null ? snap.retentionScore + '%' : '—', color: C.yellow },
-  ];
-  var bW = (contentW - 10) / 3;
-  var bH = 22;
-  var cols = 3;
-  for (var i = 0; i < boxes.length; i++) {
-    var col = i % cols;
-    var row = Math.floor(i / cols);
-    var bx = margin + col * (bW + 5);
-    var by = y + row * (bH + 4);
-    drawStatBox(doc, bx, by, bW, bH, boxes[i], C);
-  }
-  y += Math.ceil(boxes.length / cols) * (bH + 4) + 4;
-
-  // Retention bar
-  if (snap.retentionScore != null) {
-    var ret = snap.retentionData || {};
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...C.yellow);
-    doc.text('Retention: ' + snap.retentionScore + '% (' + (ret.improved || 0) + ' improved / ' + (ret.stillWeak || 0) + ' still weak)', margin, y);
-    y += 5;
-    drawProgressBar(doc, margin, y, contentW, 5, snap.retentionScore / 100, C.lime, C.surface2);
-    y += 9;
-  }
-
-  return y;
+  var filename = 'QuizReport_' + slug + '.pdf';
+  doc.save(filename);
+  showToast('✅ Report saved: ' + filename);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -3244,7 +3202,7 @@ async function createBarChart(topicStats) {
 
 /* ── PDF BUILDER ── */
 
-async function buildPDF(data, subject) {
+async function buildPDF(data, subject, filenameOverride) {
   var { jsPDF } = window.jspdf;
   var doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -3719,7 +3677,7 @@ y += chartHeight + 8;   // decent gap before footer
   drawFooter(doc, 2, 2, pH, pW, C);
 
   // Save
-  var filename = 'Quiz_Report_' + data.subjectLabel + '_' + getTodayStr() + '.pdf';
+  var filename = filenameOverride || ('Quiz_Report_' + data.subjectLabel + '_' + getTodayStr() + '.pdf');
   doc.save(filename);
   showToast('✅ Report saved: ' + filename);
 }
