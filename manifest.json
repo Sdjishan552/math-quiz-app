@@ -1,13 +1,12 @@
 {
-  "name": "Banking Practice App",
-  "short_name": "BankingQuiz",
-  "description": "Adaptive MCQ practice for math — with weak mode tracking",
+  "name": "MathQuiz Profile Hub",
+  "short_name": "MathQuiz",
+  "description": "Adaptive quiz practice with profile customization, achievements, streaks, notes, and weak mode tracking",
   "display": "standalone",
   "start_url": "./",
   "background_color": "#0f1117",
   "theme_color": "#f5a623",
   "orientation": "portrait",
-
   "icons": [
     {
       "src": "./01.png",
