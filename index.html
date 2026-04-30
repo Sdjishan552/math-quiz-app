@@ -51,13 +51,21 @@
 
   <!-- ── Header ──────────────────────────────────────────── -->
   <header>
+    <div class="header-top-row">
+      <div class="header-profile-slot">
+        <button class="header-profile-btn" id="btn-profile" type="button" aria-label="Open player profile">
+          <span class="header-profile-avatar" id="profile-home-avatar">&#x1F9E0;</span>
+        </button>
+      </div>
+      <div class="header-version-slot">
+        <div class="app-version-tag" id="app-version-tag">v--</div>
+      </div>
+    </div>
     <div class="logo">
       <span class="logo-icon" id="logo-icon">∑</span>
       <span id="logo-text">MathQuiz</span>
     </div>
     <span class="logo-sub">Adaptive Practice Engine</span>
-    <!-- App Version Badge -->
-    <div class="app-version-tag" id="app-version-tag">⚙ v—</div>
 
     <!-- XP Bar -->
     <div class="xp-bar-wrap" id="xp-bar-wrap">
@@ -586,6 +594,133 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════ -->
+  <!-- PROFILE SCREEN                                        -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-profile" class="screen">
+
+    <div class="profile-screen-header">
+      <span class="weak-list-title">🪪 Player Profile</span>
+      <span class="profile-screen-badge" id="profile-screen-badge">Maths Focus</span>
+    </div>
+
+    <div class="profile-hero-card">
+      <div class="profile-hero-top">
+        <div class="profile-hero-avatar" id="profile-hero-avatar">🧠</div>
+        <div class="profile-hero-copy">
+          <div class="profile-hero-label">Your account space</div>
+          <div class="profile-hero-rank" id="profile-hero-rank">🥉 Novice · Lv.1</div>
+          <div class="profile-hero-streak" id="profile-hero-streak">0 day streak · Goal 0 / 20</div>
+        </div>
+      </div>
+
+      <div class="profile-form-grid">
+        <label class="profile-field">
+          <span class="profile-field-label">Display Name</span>
+          <input type="text" id="profile-name-input" class="profile-input" maxlength="28" placeholder="Quiz Pilot" />
+        </label>
+        <label class="profile-field">
+          <span class="profile-field-label">Status Line</span>
+          <input type="text" id="profile-tagline-input" class="profile-input" maxlength="60" placeholder="Leveling up one question at a time" />
+        </label>
+      </div>
+
+      <div class="profile-custom-row">
+        <label class="profile-field profile-inline-field">
+          <span class="profile-field-label">Title</span>
+          <select id="profile-title-select" class="profile-select"></select>
+        </label>
+        <label class="profile-field profile-inline-field">
+          <span class="profile-field-label">Daily Goal</span>
+          <select id="profile-goal-select" class="profile-select">
+            <option value="10">10 questions</option>
+            <option value="15">15 questions</option>
+            <option value="20">20 questions</option>
+            <option value="30">30 questions</option>
+            <option value="40">40 questions</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="profile-avatar-picker" id="profile-avatar-picker"></div>
+      <div class="profile-avatar-tools">
+        <button class="profile-avatar-tool-btn" id="btn-profile-upload-image" type="button">📷 Upload Photo</button>
+        <button class="profile-avatar-tool-btn profile-avatar-tool-btn-muted" id="btn-profile-remove-image" type="button">↺ Use Emoji Avatar</button>
+        <input type="file" id="profile-image-input" accept="image/*" hidden />
+      </div>
+
+      <div class="profile-save-row">
+        <span class="profile-save-hint" id="profile-save-hint">Make your profile feel like your own.</span>
+        <button class="btn btn-primary" id="btn-save-profile">💾 Save Profile</button>
+      </div>
+    </div>
+
+    <div class="profile-stats-grid">
+      <div class="profile-stat-card">
+        <span class="profile-stat-value" id="profile-stat-sessions">0</span>
+        <span class="profile-stat-label">Sessions</span>
+      </div>
+      <div class="profile-stat-card">
+        <span class="profile-stat-value" id="profile-stat-accuracy">—</span>
+        <span class="profile-stat-label">Accuracy</span>
+      </div>
+      <div class="profile-stat-card">
+        <span class="profile-stat-value" id="profile-stat-streak">0</span>
+        <span class="profile-stat-label">Current Streak</span>
+      </div>
+      <div class="profile-stat-card">
+        <span class="profile-stat-value" id="profile-stat-achievements">0</span>
+        <span class="profile-stat-label">Badges</span>
+      </div>
+    </div>
+
+    <div class="home-card profile-mission-card">
+      <h2>⚡ Daily Mission</h2>
+      <div class="profile-goal-progress-row">
+        <div class="profile-goal-progress-copy">
+          <div class="profile-goal-progress-title" id="profile-goal-title">Today's push</div>
+          <div class="profile-goal-progress-sub" id="profile-goal-sub">Answer 0 of 20 questions today.</div>
+        </div>
+        <button class="btn btn-overall profile-daily-btn" id="btn-profile-daily-challenge">⚡ Start Daily Challenge</button>
+      </div>
+      <div class="profile-goal-track">
+        <div class="profile-goal-fill" id="profile-goal-fill" style="width:0%"></div>
+      </div>
+      <div class="profile-goal-foot" id="profile-goal-foot">Fresh streak energy waiting.</div>
+    </div>
+
+    <div class="home-card">
+      <h2>🏆 Achievement Deck</h2>
+      <p class="profile-section-hint">Unlock more badges by practicing, saving notes, and building streaks.</p>
+      <div class="profile-achievement-grid" id="profile-achievement-grid"></div>
+    </div>
+
+    <div class="home-card profile-insight-card">
+      <h2>🧠 Study Identity</h2>
+      <div class="profile-insight-title" id="profile-insight-title">Momentum Starter</div>
+      <p class="profile-insight-body" id="profile-insight-body">Your account will start reading your study style as you complete more sessions.</p>
+    </div>
+
+    <div class="home-card">
+      <h2>🚀 Quick Actions</h2>
+      <div class="profile-action-grid">
+        <button class="profile-action-btn" id="btn-profile-open-analytics">📈 Analytics</button>
+        <button class="profile-action-btn" id="btn-profile-open-bookmarks">🔖 Bookmarks</button>
+        <button class="profile-action-btn" id="btn-profile-open-notes">📝 Notes</button>
+        <button class="profile-action-btn" id="btn-profile-open-reports">📋 Reports</button>
+      </div>
+    </div>
+
+    <div class="home-card">
+      <h2>🕒 Activity Timeline</h2>
+      <p class="profile-section-hint">Your latest sessions from both Maths and Reasoning show up here.</p>
+      <div class="profile-timeline-list" id="profile-timeline-list"></div>
+    </div>
+
+    <button class="btn btn-ghost" id="btn-profile-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
   <!-- QUESTION BANK SCREEN                                  -->
   <!-- ══════════════════════════════════════════════════════ -->
   <section id="screen-bank" class="screen">
@@ -963,3 +1098,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+
