@@ -50,6 +50,8 @@ const UNREAD_REPORTS_KEY  = 'quiz_unread_reports';     // count of unread auto r
 
 // XP is global across both subjects (one player profile)
 const XP_KEY        = 'quiz_xp_total';
+const PROFILE_KEY   = 'quiz_player_profile';
+const PROFILE_BADGE_SEEN_KEY = 'quiz_profile_seen_achievements';
 
 // ── XP / Gamification config ───────────────────────────────
 const XP_PER_CORRECT  = 10;
@@ -66,6 +68,21 @@ const LEVELS = [
   { level: 9,  title: 'Grandmaster',  xpMin: 4200  },
   { level: 10, title: 'Legend',       xpMin: 6000  },
 ];
+
+const PROFILE_AVATARS = ['🧠', '⚡', '🚀', '🎯', '🧩', '📘', '🔥', '🌟'];
+const PROFILE_TITLES = [
+  { value: 'Novice', label: 'Novice', minLevel: 1 },
+  { value: 'Spark Scout', label: 'Spark Scout', minLevel: 2 },
+  { value: 'Formula Runner', label: 'Formula Runner', minLevel: 3 },
+  { value: 'Logic Ranger', label: 'Logic Ranger', minLevel: 4 },
+  { value: 'Pattern Breaker', label: 'Pattern Breaker', minLevel: 5 },
+  { value: 'Quiz Captain', label: 'Quiz Captain', minLevel: 6 },
+  { value: 'Brain Architect', label: 'Brain Architect', minLevel: 8 },
+  { value: 'Legend Mode', label: 'Legend Mode', minLevel: 10 }
+];
+
+let _profileDraftAvatarMode = null;
+let _profileDraftCustomAvatar = null;
 
 // ── State ──────────────────────────────────────────────────
 let allQuestions   = [];
@@ -105,6 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await switchSubject('maths', true);
   checkAndGenerateAutoReports();
   updateReportsBadge();
+  refreshProfileSurfaces(false);
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js');
@@ -730,7 +748,7 @@ function restoreFullBackup(snapshot) {
     });
   });
 
-  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY];
+  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY, PROFILE_KEY, PROFILE_BADGE_SEEN_KEY];
   if (snapshot.global) {
     globalKeys.forEach(function(k) {
       if (snapshot.global[k] !== undefined) {
@@ -744,7 +762,8 @@ function restoreFullBackup(snapshot) {
   switchSubject(activeSubject, false);
   updateXPBar();
   updateReportsBadge();
-  showUploadResult('success', '✅ Full backup restored!', 'All statistics, questions and history for both subjects have been restored from ' + snapshot._date);
+  refreshProfileSurfaces(false);
+  showUploadResult('success', '✅ Full backup restored!', 'All statistics, questions, notes, and profile data for both subjects have been restored from ' + snapshot._date);
   showToast('✅ Full backup restored from ' + snapshot._date);
 }
 
@@ -1163,7 +1182,7 @@ function showExportChoiceModal() {
     'background:var(--surface2);border:1px solid var(--violet);border-radius:12px;',
     'color:var(--text);font-size:0.9rem;font-weight:600;cursor:pointer;text-align:left">',
     '<div style="font-size:1rem;margin-bottom:3px">💾 All App Data</div>',
-    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions + stats + topic notes (text, images, PDFs, links) — full restore</div>',
+    '<div style="font-size:0.76rem;color:var(--muted);font-weight:400">Questions + stats + topic notes + profile data and photo — full restore</div>',
     '</button>',
 
     '<button id="exp-cancel-btn" style="width:100%;padding:10px;',
@@ -1219,7 +1238,7 @@ function doExportAllData() {
     });
   });
 
-  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY];
+  var globalKeys = [AUTO_REPORTS_KEY, LAST_WEEKLY_KEY, LAST_MONTHLY_KEY, UNREAD_REPORTS_KEY, XP_KEY, PROFILE_KEY, PROFILE_BADGE_SEEN_KEY];
   globalKeys.forEach(function(k) {
     var v = localStorage.getItem(k);
     if (v !== null) {
@@ -1237,7 +1256,7 @@ function doExportAllData() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('✅ Full backup exported!');
-  showUploadResult('success', '✅ Full app backup exported', 'File: ' + filename + ' · Includes questions, stats, and topic notes (text, images, PDFs, links) for both subjects');
+  showUploadResult('success', '✅ Full app backup exported', 'File: ' + filename + ' · Includes questions, stats, topic notes, and profile data for both subjects');
 }
 
 function getTodayStr() {
@@ -1302,6 +1321,7 @@ function checkForResume() {
   var remaining = snap.sessionQueue.length - snap.sessionIndex;
   var modeLabel = snap.mode === 'overall'   ? '🌐 Overall Quiz'
                 : snap.mode === 'weaktest'  ? '🔴 Weak Test'
+                : snap.mode === 'daily'     ? '⚡ Daily Challenge'
                 : snap.mode === 'bookmark'  ? '🔖 Bookmarks Quiz'
                 : snap.selectedTopics && snap.selectedTopics.length > 0
                   ? '📘 ' + (snap.selectedTopics.length === 1 ? snap.selectedTopics[0] : snap.selectedTopics.length + ' Topics')
@@ -1453,6 +1473,8 @@ function updateHomeStats() {
     exportBtn.style.display = allQuestions.length > 0 ? 'flex' : 'none';
     exportBtn.textContent   = '⬇ Export / Backup';
   }
+
+  updateProfileQuickView();
 }
 
 function updateSetupHint() {
@@ -1520,7 +1542,7 @@ function buildSessionEntry() {
     mode:     currentMode,
     topic:    currentMode === 'normal'
                 ? (selectedTopics.length === 1 ? selectedTopics[0] : selectedTopics.length + ' Topics')
-                : (currentMode === 'overall' ? 'All Topics' : currentMode === 'bookmark' ? 'Bookmarks' : 'Weak'),
+                : (currentMode === 'overall' ? 'All Topics' : currentMode === 'bookmark' ? 'Bookmarks' : currentMode === 'daily' ? 'Daily Challenge' : 'Weak'),
     total:    attempted,
     correct:  score,
     wrong:    attempted - score,
@@ -1549,7 +1571,7 @@ function renderHistory(filterTab) {
     var d        = new Date(s.date);
     var dateStr  = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     var timeStr  = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-    var modeLabel = s.mode === 'overall' ? '🌐 Overall' : s.mode === 'normal' ? '📘 Topic' : s.mode === 'weaktest' ? '🔴 Weak Test' : '🔁 Retry';
+    var modeLabel = s.mode === 'overall' ? '🌐 Overall' : s.mode === 'normal' ? '📘 Topic' : s.mode === 'bookmark' ? '🔖 Bookmark' : s.mode === 'daily' ? '⚡ Daily' : s.mode === 'weaktest' ? '🔴 Weak Test' : '🔁 Retry';
     var pctColor  = s.pct >= 80 ? 'var(--green)' : s.pct >= 50 ? 'var(--amber)' : 'var(--red)';
     var timeInfo  = s.timeSecs != null ? '<span class="hist-time">⏱ ' + formatTime(s.timeSecs) + '</span>' : '';
     var subjCfg   = SUBJECTS[s.subject] || SUBJECTS['maths'];
@@ -1589,6 +1611,7 @@ function bindEvents() {
   document.getElementById('btn-history').addEventListener('click', function() { showHistoryScreen('all'); });
   document.getElementById('btn-bookmarks').addEventListener('click', showBookmarkScreen);
   document.getElementById('btn-analytics').addEventListener('click', showAnalyticsScreen);
+  document.getElementById('btn-profile').addEventListener('click', showProfileScreen);
 
   // Question Bank screen
   document.getElementById('btn-open-bank').addEventListener('click', function() { showScreen('bank'); });
@@ -1606,6 +1629,23 @@ function bindEvents() {
 
   // Analytics screen
   document.getElementById('btn-analytics-home').addEventListener('click', function() { showScreen('home'); });
+
+  // Profile screen
+  document.getElementById('btn-profile-home').addEventListener('click', function() { showScreen('home'); });
+  document.getElementById('btn-save-profile').addEventListener('click', saveProfileFromForm);
+  document.getElementById('btn-profile-daily-challenge').addEventListener('click', startDailyChallenge);
+  document.getElementById('btn-profile-open-analytics').addEventListener('click', showAnalyticsScreen);
+  document.getElementById('btn-profile-open-bookmarks').addEventListener('click', showBookmarkScreen);
+  document.getElementById('btn-profile-open-notes').addEventListener('click', showNotesScreen);
+  document.getElementById('btn-profile-open-reports').addEventListener('click', showAutoReportsScreen);
+  document.getElementById('btn-profile-upload-image').addEventListener('click', function() {
+    document.getElementById('profile-image-input').click();
+  });
+  document.getElementById('btn-profile-remove-image').addEventListener('click', clearDraftProfileImage);
+  document.getElementById('profile-image-input').addEventListener('change', function() {
+    if (this.files && this.files[0]) handleProfileImageUpload(this.files[0]);
+    this.value = '';
+  });
 
   // PDF Report button
   var pdfBtn = document.getElementById('btn-pdf-report');
@@ -2066,6 +2106,7 @@ function showResult() {
 
   showScreen('result');
   updateHomeStats();
+  refreshProfileSurfaces(true);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2159,6 +2200,617 @@ function updateXPBar() {
   document.getElementById('xp-rank-title').textContent   = getRankEmoji(info.level) + ' ' + info.title;
   document.getElementById('xp-bar-fill').style.width     = info.pct + '%';
   document.getElementById('xp-bar-label').textContent    = info.xp + ' XP';
+  populateProfileTitleOptions(info.level);
+  updateProfileQuickView();
+}
+
+// ══════════════════════════════════════════════════════════
+// PROFILE HUB
+// ══════════════════════════════════════════════════════════
+
+function getDefaultProfile() {
+  return {
+    displayName: 'Quiz Pilot',
+    tagline: 'Leveling up one question at a time',
+    avatar: '🧠',
+    avatarMode: 'emoji',
+    customAvatar: '',
+    title: 'Novice',
+    dailyGoal: 20
+  };
+}
+
+function loadProfile() {
+  var profile = {};
+  try { profile = JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { profile = {}; }
+  profile = Object.assign({}, getDefaultProfile(), profile);
+  if (profile.customAvatar && profile.customAvatar.trim()) {
+    profile.avatarMode = profile.avatarMode === 'emoji' ? 'emoji' : 'image';
+  } else {
+    profile.avatarMode = 'emoji';
+    profile.customAvatar = '';
+  }
+  if (PROFILE_AVATARS.indexOf(profile.avatar) === -1) profile.avatar = '🧠';
+  if (!profile.displayName || !profile.displayName.trim()) profile.displayName = 'Quiz Pilot';
+  if (!profile.tagline || !profile.tagline.trim()) profile.tagline = 'Leveling up one question at a time';
+  if (!profile.dailyGoal || isNaN(profile.dailyGoal)) profile.dailyGoal = 20;
+  profile.dailyGoal = Math.max(10, Math.min(parseInt(profile.dailyGoal, 10), 40));
+  return profile;
+}
+
+function saveProfileData(profile) {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
+function renderAvatarElement(el, profile) {
+  if (!el) return;
+  var useImage = profile && profile.avatarMode === 'image' && profile.customAvatar;
+  el.innerHTML = '';
+  if (useImage) {
+    var img = document.createElement('img');
+    img.className = 'profile-avatar-image';
+    img.src = profile.customAvatar;
+    img.alt = 'Profile avatar';
+    el.appendChild(img);
+  } else {
+    el.textContent = (profile && profile.avatar) || '🧠';
+  }
+}
+
+function getProfileDraftPreview(baseProfile) {
+  var profile = Object.assign({}, baseProfile || loadProfile());
+  if (_profileDraftAvatarMode === 'image') {
+    profile.avatarMode = 'image';
+    profile.customAvatar = _profileDraftCustomAvatar || profile.customAvatar || '';
+  } else if (_profileDraftAvatarMode === 'emoji') {
+    profile.avatarMode = 'emoji';
+    profile.customAvatar = '';
+  }
+  return profile;
+}
+
+function updateProfileAvatarPreview(profile) {
+  var resolved = getProfileDraftPreview(profile || loadProfile());
+  renderAvatarElement(document.getElementById('profile-home-avatar'), resolved);
+  renderAvatarElement(document.getElementById('profile-hero-avatar'), resolved);
+}
+
+function clearDraftProfileImage() {
+  _profileDraftAvatarMode = 'emoji';
+  _profileDraftCustomAvatar = null;
+  var profile = loadProfile();
+  updateProfileAvatarPreview(profile);
+  renderProfileAvatarPicker(profile.avatar);
+  var hint = document.getElementById('profile-save-hint');
+  if (hint) hint.textContent = 'Emoji avatar selected. Save to keep it.';
+}
+
+function handleProfileImageUpload(file) {
+  if (!file) return;
+  if (!file.type || file.type.indexOf('image/') !== 0) {
+    showToast('Please choose an image file.');
+    return;
+  }
+  processProfileImageFile(file).then(function(dataUrl) {
+    _profileDraftAvatarMode = 'image';
+    _profileDraftCustomAvatar = dataUrl;
+    updateProfileAvatarPreview(loadProfile());
+    document.querySelectorAll('.profile-avatar-chip').forEach(function(chip) { chip.classList.remove('active'); });
+    var hint = document.getElementById('profile-save-hint');
+    if (hint) hint.textContent = 'Photo ready. Save profile to keep this picture.';
+    showToast('Profile photo added.');
+  }).catch(function(err) {
+    showToast(err || 'Could not process this image.');
+  });
+}
+
+function processProfileImageFile(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        try {
+          var size = 256;
+          var canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          var sourceSize = Math.min(img.width, img.height);
+          var sx = (img.width - sourceSize) / 2;
+          var sy = (img.height - sourceSize) / 2;
+          ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.86));
+        } catch (err) {
+          reject('Could not process this image.');
+        }
+      };
+      img.onerror = function() { reject('This image could not be read.'); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function() { reject('This image could not be loaded.'); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function getSubjectHistoryRaw(subject) {
+  try { return JSON.parse(localStorage.getItem('quiz_' + subject + '_session_history')) || []; } catch { return []; }
+}
+
+function getSubjectWeakStatsRaw(subject) {
+  try { return JSON.parse(localStorage.getItem('quiz_' + subject + '_weak_stats')) || {}; } catch { return {}; }
+}
+
+function getSubjectBookmarksRaw(subject) {
+  try { return JSON.parse(localStorage.getItem('quiz_' + subject + '_bookmarks')) || {}; } catch { return {}; }
+}
+
+function getSubjectNotesRaw(subject) {
+  try { return JSON.parse(localStorage.getItem('quiz_' + subject + '_topic_notes')) || {}; } catch { return {}; }
+}
+
+function hasNoteContent(note) {
+  if (!note) return false;
+  return !!(
+    (note.text && note.text.trim()) ||
+    (note.images && note.images.length) ||
+    (note.pdfs && note.pdfs.length) ||
+    (note.driveLink && note.driveLink.trim())
+  );
+}
+
+function getCombinedHistory() {
+  var history = getSubjectHistoryRaw('maths').concat(getSubjectHistoryRaw('reasoning'));
+  history.sort(function(a, b) {
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  });
+  return history;
+}
+
+function pad2(num) {
+  return String(num).padStart(2, '0');
+}
+
+function dayKeyFromDate(dateInput) {
+  var d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+function parseDayKey(dayKey) {
+  var parts = String(dayKey || '').split('-');
+  if (parts.length !== 3) return null;
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+}
+
+function diffInDays(a, b) {
+  var ms = 24 * 60 * 60 * 1000;
+  var utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  var utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((utcA - utcB) / ms);
+}
+
+function formatProfileDate(dateInput) {
+  var d = new Date(dateInput);
+  if (isNaN(d.getTime())) return 'Unknown';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function getStreakSummary(history) {
+  var uniqueDays = Array.from(new Set(history.map(function(item) { return dayKeyFromDate(item.date); }).filter(Boolean)));
+  uniqueDays.sort();
+
+  var best = 0;
+  var run = 0;
+  var prev = null;
+  uniqueDays.forEach(function(dayKey) {
+    var current = parseDayKey(dayKey);
+    if (!current) return;
+    if (!prev || diffInDays(current, prev) === 1) run++;
+    else run = 1;
+    if (run > best) best = run;
+    prev = current;
+  });
+
+  var currentStreak = 0;
+  if (uniqueDays.length > 0) {
+    var latest = parseDayKey(uniqueDays[uniqueDays.length - 1]);
+    var today = new Date();
+    var gap = diffInDays(today, latest);
+    if (gap === 0 || gap === 1) {
+      currentStreak = 1;
+      var cursor = latest;
+      for (var i = uniqueDays.length - 2; i >= 0; i--) {
+        var day = parseDayKey(uniqueDays[i]);
+        if (!day) continue;
+        if (diffInDays(cursor, day) === 1) {
+          currentStreak++;
+          cursor = day;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  return {
+    current: currentStreak,
+    best: best,
+    activeDays: uniqueDays.length,
+    lastActive: uniqueDays.length ? uniqueDays[uniqueDays.length - 1] : ''
+  };
+}
+
+function getGlobalProfileStats() {
+  var profile = loadProfile();
+  var history = getCombinedHistory();
+  var totalAttempts = 0;
+  var totalCorrect = 0;
+  var todayAttempts = 0;
+  var subjectSet = {};
+  var bestSessionQuestions = 0;
+
+  history.forEach(function(item) {
+    totalAttempts += item.total || 0;
+    totalCorrect += item.correct || 0;
+    bestSessionQuestions = Math.max(bestSessionQuestions, item.total || 0);
+    if (item.subject) subjectSet[item.subject] = true;
+    if (dayKeyFromDate(item.date) === dayKeyFromDate(new Date())) todayAttempts += item.total || 0;
+  });
+
+  var mathsWeak = getSubjectWeakStatsRaw('maths');
+  var reasoningWeak = getSubjectWeakStatsRaw('reasoning');
+  var weakRecords = Object.values(mathsWeak).concat(Object.values(reasoningWeak));
+  var weakEver = weakRecords.filter(function(item) { return item && item.everWrong; });
+  var weakImproved = weakEver.filter(function(item) { return item.corrected; }).length;
+
+  var notesMaths = Object.values(getSubjectNotesRaw('maths')).filter(hasNoteContent).length;
+  var notesReasoning = Object.values(getSubjectNotesRaw('reasoning')).filter(hasNoteContent).length;
+  var bookmarksCount = Object.keys(getSubjectBookmarksRaw('maths')).length + Object.keys(getSubjectBookmarksRaw('reasoning')).length;
+  var streak = getStreakSummary(history);
+  var accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+  var xp = getTotalXP();
+  var levelInfo = getLevelInfo(xp);
+
+  return {
+    profile: profile,
+    history: history,
+    totalSessions: history.length,
+    totalAttempts: totalAttempts,
+    totalCorrect: totalCorrect,
+    accuracy: accuracy,
+    todayAttempts: todayAttempts,
+    bookmarksCount: bookmarksCount,
+    notesCount: notesMaths + notesReasoning,
+    weakRecovered: weakImproved,
+    weakTotal: weakEver.length,
+    streak: streak,
+    xp: xp,
+    levelInfo: levelInfo,
+    bestSessionQuestions: bestSessionQuestions,
+    subjectsUsed: Object.keys(subjectSet).length
+  };
+}
+
+function buildAchievement(progress, goal) {
+  var pct = goal > 0 ? Math.min(100, Math.round((progress / goal) * 100)) : 100;
+  return { progress: progress, goal: goal, pct: pct };
+}
+
+function getProfileAchievements(stats) {
+  var accuracyProgress = stats.totalAttempts >= 20 ? stats.accuracy : Math.min(80, Math.round((stats.totalAttempts / 20) * 80));
+  var items = [
+    { id: 'first_session', icon: '🎬', title: 'First Lift-Off', desc: 'Finish your first session.', metric: buildAchievement(stats.totalSessions, 1) },
+    { id: 'streak_3', icon: '🔥', title: '3-Day Flame', desc: 'Study on 3 consecutive days.', metric: buildAchievement(stats.streak.current, 3) },
+    { id: 'xp_250', icon: '⚡', title: 'XP Charger', desc: 'Reach 250 total XP.', metric: buildAchievement(stats.xp, 250) },
+    { id: 'accuracy_80', icon: '🎯', title: 'Sharp Shooter', desc: 'Hit 80% accuracy with at least 20 attempts.', metric: buildAchievement(accuracyProgress, 80) },
+    { id: 'bookmark_5', icon: '🔖', title: 'Collector', desc: 'Save 5 bookmarks.', metric: buildAchievement(stats.bookmarksCount, 5) },
+    { id: 'notes_3', icon: '📝', title: 'Notes Builder', desc: 'Create notes for 3 topics.', metric: buildAchievement(stats.notesCount, 3) },
+    { id: 'recovery_5', icon: '🛠', title: 'Weakness Fixer', desc: 'Correct 5 previously weak questions.', metric: buildAchievement(stats.weakRecovered, 5) },
+    { id: 'duo_subject', icon: '🌐', title: 'Dual Subject', desc: 'Play both Maths and Reasoning.', metric: buildAchievement(stats.subjectsUsed, 2) },
+    { id: 'marathon_25', icon: '🏁', title: 'Marathon Mind', desc: 'Finish a 25-question session.', metric: buildAchievement(stats.bestSessionQuestions, 25) }
+  ];
+
+  return items.map(function(item) {
+    item.unlocked = item.metric.progress >= item.metric.goal;
+    return item;
+  });
+}
+
+function syncProfileAchievements(showToasts, knownStats) {
+  var stats = knownStats || getGlobalProfileStats();
+  var achievements = getProfileAchievements(stats);
+  var unlockedIds = achievements.filter(function(item) { return item.unlocked; }).map(function(item) { return item.id; });
+  var seen = [];
+  try { seen = JSON.parse(localStorage.getItem(PROFILE_BADGE_SEEN_KEY)) || []; } catch { seen = []; }
+
+  var newOnes = achievements.filter(function(item) {
+    return item.unlocked && seen.indexOf(item.id) === -1;
+  });
+
+  if (newOnes.length > 0) {
+    localStorage.setItem(PROFILE_BADGE_SEEN_KEY, JSON.stringify(seen.concat(newOnes.map(function(item) { return item.id; }))));
+    if (showToasts) {
+      var label = newOnes[0].title + (newOnes.length > 1 ? ' +' + (newOnes.length - 1) + ' more' : '');
+      showToast('🏆 Badge unlocked: ' + label);
+    }
+  }
+
+  return achievements;
+}
+
+function getUnlockedTitles(level) {
+  return PROFILE_TITLES.filter(function(item) { return level >= item.minLevel; });
+}
+
+function populateProfileTitleOptions(level, selectedTitle) {
+  var select = document.getElementById('profile-title-select');
+  if (!select) return;
+
+  var unlocked = getUnlockedTitles(level || getLevelInfo(getTotalXP()).level);
+  var titles = unlocked.map(function(item) {
+    return '<option value="' + item.value + '">' + item.label + '</option>';
+  }).join('');
+
+  select.innerHTML = titles;
+  var profile = loadProfile();
+  var wanted = selectedTitle || profile.title;
+  var allowed = unlocked.some(function(item) { return item.value === wanted; });
+  select.value = allowed ? wanted : unlocked[unlocked.length - 1].value;
+}
+
+function renderProfileAvatarPicker(selectedAvatar) {
+  var picker = document.getElementById('profile-avatar-picker');
+  if (!picker) return;
+  var preview = getProfileDraftPreview(loadProfile());
+  picker.innerHTML = PROFILE_AVATARS.map(function(avatar) {
+    var active = preview.avatarMode !== 'image' && avatar === selectedAvatar;
+    return '<button class="profile-avatar-chip' + (active ? ' active' : '') + '" data-avatar="' + avatar + '" type="button">' + avatar + '</button>';
+  }).join('');
+
+  picker.querySelectorAll('.profile-avatar-chip').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      picker.querySelectorAll('.profile-avatar-chip').forEach(function(chip) { chip.classList.remove('active'); });
+      btn.classList.add('active');
+      _profileDraftAvatarMode = 'emoji';
+      _profileDraftCustomAvatar = null;
+      updateProfileAvatarPreview(Object.assign({}, loadProfile(), { avatar: btn.dataset.avatar }));
+      var saveHint = document.getElementById('profile-save-hint');
+      if (saveHint) saveHint.textContent = 'Avatar selected. Save to lock it in.';
+    });
+  });
+}
+
+function getStudyIdentity(stats) {
+  if (stats.totalSessions === 0) {
+    return {
+      title: 'Momentum Starter',
+      body: 'Your profile is ready. Finish a few sessions and this space will start reading your real study style.'
+    };
+  }
+
+  if (stats.notesCount >= 3 && stats.bookmarksCount >= 3) {
+    return {
+      title: 'Strategy Crafter',
+      body: 'You do not just answer questions, you build a system around them. Notes, saved questions, and structure are part of your edge.'
+    };
+  }
+
+  if (stats.weakRecovered >= 5) {
+    return {
+      title: 'Comeback Builder',
+      body: 'You revisit mistakes and turn them into wins. That recovery habit is exactly what keeps weak areas from staying weak.'
+    };
+  }
+
+  if (stats.accuracy >= 80 && stats.totalAttempts >= 20) {
+    return {
+      title: 'Precision Ace',
+      body: 'Your answers are landing cleanly. Accuracy is becoming a real strength, so this is a great time to stretch into harder mixed practice.'
+    };
+  }
+
+  if (stats.streak.current >= 3) {
+    return {
+      title: 'Consistency Engine',
+      body: 'You are showing up repeatedly, which is the hardest part for most learners. Keep the streak alive and the rest compounds fast.'
+    };
+  }
+
+  return {
+    title: 'Momentum Starter',
+    body: 'You are building practice rhythm. A few more sessions, bookmarks, or notes will start unlocking a much stronger profile.'
+  };
+}
+
+function renderProfileTimeline(history) {
+  var container = document.getElementById('profile-timeline-list');
+  if (!container) return;
+
+  if (!history.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🪄</div><p>No activity yet.<br>Start a quiz and your journey will show up here.</p></div>';
+    return;
+  }
+
+  container.innerHTML = history.slice(0, 6).map(function(item) {
+    var subj = SUBJECTS[item.subject] || SUBJECTS.maths;
+    var pctColor = item.pct >= 80 ? 'var(--green)' : item.pct >= 50 ? 'var(--amber)' : 'var(--red)';
+    var modeLabel = item.mode === 'overall' ? 'Overall' : item.mode === 'daily' ? 'Daily Challenge' : item.mode === 'bookmark' ? 'Bookmarks' : item.mode === 'weaktest' ? 'Weak Test' : item.mode === 'retry' ? 'Retry' : item.topic;
+    return '<div class="profile-timeline-item">' +
+      '<div class="profile-timeline-main">' +
+        '<div class="profile-timeline-top">' +
+          '<span class="profile-timeline-pill profile-timeline-pill-' + item.subject + '">' + subj.icon + ' ' + (item.subject === 'reasoning' ? 'Reasoning' : 'Maths') + '</span>' +
+          '<span class="profile-timeline-mode">' + escHtml(modeLabel) + '</span>' +
+        '</div>' +
+        '<div class="profile-timeline-meta">' + formatProfileDate(item.date) + ' · ' + item.correct + '/' + item.total + ' correct</div>' +
+      '</div>' +
+      '<div class="profile-timeline-score" style="color:' + pctColor + '">' + item.pct + '%</div>' +
+    '</div>';
+  }).join('');
+}
+
+function updateProfileQuickView(knownStats) {
+  var stats = knownStats || getGlobalProfileStats();
+  var achievements = getProfileAchievements(stats);
+  var unlockedCount = achievements.filter(function(item) { return item.unlocked; }).length;
+
+  var btn = document.getElementById('btn-profile');
+
+  updateProfileAvatarPreview(stats.profile);
+  if (btn) {
+    var label = stats.profile.displayName + ' · ' + stats.profile.title + ' · Level ' + stats.levelInfo.level + ' · ' + stats.streak.current + ' day streak · ' + unlockedCount + ' badges';
+    btn.setAttribute('aria-label', 'Open player profile for ' + stats.profile.displayName);
+    btn.title = label;
+  }
+}
+
+function refreshProfileSurfaces(showBadgeToasts) {
+  var stats = getGlobalProfileStats();
+  syncProfileAchievements(!!showBadgeToasts, stats);
+  updateProfileQuickView(stats);
+  if (document.getElementById('screen-profile') && document.getElementById('screen-profile').classList.contains('active')) {
+    renderProfileScreen(stats);
+  }
+}
+
+function renderProfileScreen(knownStats) {
+  var stats = knownStats || getGlobalProfileStats();
+  var achievements = getProfileAchievements(stats);
+  var unlockedCount = achievements.filter(function(item) { return item.unlocked; }).length;
+  var insight = getStudyIdentity(stats);
+  var goalPct = stats.profile.dailyGoal > 0 ? Math.min(100, Math.round((stats.todayAttempts / stats.profile.dailyGoal) * 100)) : 0;
+  var currentSubjectLabel = activeSubject === 'reasoning' ? 'Reasoning Focus' : 'Maths Focus';
+  _profileDraftAvatarMode = null;
+  _profileDraftCustomAvatar = null;
+
+  document.getElementById('profile-screen-badge').textContent = currentSubjectLabel;
+  updateProfileAvatarPreview(stats.profile);
+  document.getElementById('profile-hero-rank').textContent = getRankEmoji(stats.levelInfo.level) + ' ' + stats.profile.title + ' · Lv.' + stats.levelInfo.level;
+  document.getElementById('profile-hero-streak').textContent = stats.streak.current + ' day streak · Goal ' + stats.todayAttempts + '/' + stats.profile.dailyGoal;
+  document.getElementById('profile-name-input').value = stats.profile.displayName;
+  document.getElementById('profile-tagline-input').value = stats.profile.tagline;
+  document.getElementById('profile-goal-select').value = String(stats.profile.dailyGoal);
+  document.getElementById('profile-save-hint').textContent = stats.profile.tagline;
+
+  populateProfileTitleOptions(stats.levelInfo.level, stats.profile.title);
+  renderProfileAvatarPicker(stats.profile.avatar);
+
+  document.getElementById('profile-stat-sessions').textContent = stats.totalSessions;
+  document.getElementById('profile-stat-accuracy').textContent = stats.totalAttempts > 0 ? stats.accuracy + '%' : '—';
+  document.getElementById('profile-stat-streak').textContent = stats.streak.current;
+  document.getElementById('profile-stat-achievements').textContent = unlockedCount;
+
+  document.getElementById('profile-goal-title').textContent = goalPct >= 100 ? 'Daily goal crushed' : 'Today\'s push';
+  document.getElementById('profile-goal-sub').textContent = 'Answer ' + stats.todayAttempts + ' of ' + stats.profile.dailyGoal + ' questions today.';
+  document.getElementById('profile-goal-fill').style.width = goalPct + '%';
+  document.getElementById('profile-goal-foot').textContent =
+    goalPct >= 100
+      ? 'You already hit today\'s goal. Keep going if you want bonus momentum.'
+      : (stats.profile.dailyGoal - stats.todayAttempts) + ' more question' + ((stats.profile.dailyGoal - stats.todayAttempts) !== 1 ? 's' : '') + ' to complete today\'s mission.';
+
+  document.getElementById('profile-achievement-grid').innerHTML = achievements.map(function(item) {
+    return '<div class="profile-achievement-card' + (item.unlocked ? ' unlocked' : '') + '">' +
+      '<div class="profile-achievement-icon">' + item.icon + '</div>' +
+      '<div class="profile-achievement-title">' + item.title + '</div>' +
+      '<div class="profile-achievement-desc">' + item.desc + '</div>' +
+      '<div class="profile-achievement-track"><div class="profile-achievement-fill" style="width:' + item.metric.pct + '%"></div></div>' +
+      '<div class="profile-achievement-meta">' + item.metric.progress + ' / ' + item.metric.goal + (item.unlocked ? ' · Unlocked' : '') + '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('profile-insight-title').textContent = insight.title;
+  document.getElementById('profile-insight-body').textContent = insight.body;
+
+  renderProfileTimeline(stats.history);
+}
+
+function showProfileScreen() {
+  renderProfileScreen(getGlobalProfileStats());
+  showScreen('profile');
+}
+
+function saveProfileFromForm() {
+  var currentStats = getGlobalProfileStats();
+  var unlockedTitles = getUnlockedTitles(currentStats.levelInfo.level).map(function(item) { return item.value; });
+  var activeAvatarBtn = document.querySelector('.profile-avatar-chip.active');
+  var avatarMode = _profileDraftAvatarMode || currentStats.profile.avatarMode || 'emoji';
+  var customAvatar = avatarMode === 'image'
+    ? (_profileDraftCustomAvatar || currentStats.profile.customAvatar || '')
+    : '';
+  var profile = {
+    displayName: (document.getElementById('profile-name-input').value || '').trim() || 'Quiz Pilot',
+    tagline: (document.getElementById('profile-tagline-input').value || '').trim() || 'Leveling up one question at a time',
+    avatar: activeAvatarBtn ? activeAvatarBtn.dataset.avatar : currentStats.profile.avatar,
+    avatarMode: avatarMode,
+    customAvatar: customAvatar,
+    title: document.getElementById('profile-title-select').value,
+    dailyGoal: parseInt(document.getElementById('profile-goal-select').value, 10) || 20
+  };
+
+  if (profile.avatarMode === 'image' && !profile.customAvatar) {
+    profile.avatarMode = 'emoji';
+  }
+
+  if (unlockedTitles.indexOf(profile.title) === -1) {
+    profile.title = unlockedTitles[unlockedTitles.length - 1];
+  }
+
+  saveProfileData(profile);
+  _profileDraftAvatarMode = null;
+  _profileDraftCustomAvatar = null;
+  refreshProfileSurfaces(false);
+  renderProfileScreen(getGlobalProfileStats());
+  showToast('Profile saved!');
+}
+
+function buildDailyChallengeQueue() {
+  var recentTopics = getCombinedHistory()
+    .filter(function(item) { return item.subject === activeSubject; })
+    .slice(0, 5)
+    .map(function(item) { return item.topic; });
+
+  var ranked = allQuestions.slice().sort(function(a, b) {
+    var aStats = weakStats[a.id] || {};
+    var bStats = weakStats[b.id] || {};
+    var aAttempts = aStats.attempts || 0;
+    var bAttempts = bStats.attempts || 0;
+    var aWrong = aStats.wrong || 0;
+    var bWrong = bStats.wrong || 0;
+
+    var aPriority = (aAttempts === 0 ? 24 : 0) + (aWrong * 12) + (recentTopics.indexOf(a.topic) >= 0 ? 5 : 0) - aAttempts;
+    var bPriority = (bAttempts === 0 ? 24 : 0) + (bWrong * 12) + (recentTopics.indexOf(b.topic) >= 0 ? 5 : 0) - bAttempts;
+    return bPriority - aPriority;
+  });
+
+  return shuffle(ranked.slice(0, Math.min(7, ranked.length)));
+}
+
+function startDailyChallenge() {
+  if (allQuestions.length === 0) {
+    showToast('Load questions first to start your daily challenge.');
+    return;
+  }
+
+  currentMode = 'daily';
+  score = 0;
+  attempted = 0;
+  sessionWrong = [];
+  sessionIndex = 0;
+  skippedIndices = [];
+  seenCount = 0;
+  timerMode = 'countup';
+  sessionQueue = buildDailyChallengeQueue();
+
+  if (sessionQueue.length === 0) {
+    showToast('No questions available for the daily challenge yet.');
+    return;
+  }
+
+  startTimer();
+  showScreen('quiz');
+  updateModeIndicator();
+  saveResumeSnapshot();
+  loadQuestion();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2355,6 +3007,8 @@ function updateModeIndicator() {
     el.textContent = '🔁 Retry Mode'; el.className = 'mode-indicator';
   } else if (currentMode === 'overall') {
     el.textContent = '🌐 Overall Quiz'; el.className = 'mode-indicator overall';
+  } else if (currentMode === 'daily') {
+    el.textContent = '⚡ Daily Challenge'; el.className = 'mode-indicator overall';
   } else if (currentMode === 'bookmark') {
     el.textContent = '🔖 Bookmarks Quiz'; el.className = 'mode-indicator bookmark';
   } else {
@@ -4217,10 +4871,11 @@ function renderNotesTopicList(topics) {
 }
 
 function updateNotesHomeBadge() {
-  var badge = document.getElementById('notes-count-badge');
-  if (!badge) return;
-  var n = countTopicsWithNotes();
-  badge.textContent = n > 0 ? n + ' noted' : '0 topics';
+var badge = document.getElementById('notes-count-badge');
+if (!badge) return;
+var n = countTopicsWithNotes();
+badge.textContent = n > 0 ? n + ' noted' : '0 topics';
+refreshProfileSurfaces(false);
 }
 
 // ── Topic Notes Modal ─────────────────────────────────────
