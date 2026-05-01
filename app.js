@@ -2693,7 +2693,7 @@ function renderProfileHeatmap(history) {
   });
 }
 
-
+function renderProfileTimeline(history) {
   var container = document.getElementById('profile-timeline-list');
   if (!container) return;
 
