@@ -5565,3 +5565,383 @@ function _refreshTopicDeleteButtons() {
     }
   });
 }
+
+// ══════════════════════════════════════════════════════════
+// CHEAT SHEET QUIZ ENGINE
+// ══════════════════════════════════════════════════════════
+
+var CQ = (function() {
+
+  // ── DATA ──────────────────────────────────────────────
+  var DATA = {
+
+    squares: (function() {
+      var qs = [];
+      for (var n = 11; n <= 50; n++) {
+        var sq = n * n;
+        // direction 1: what is n²?
+        qs.push({ q: 'What is ' + n + '² (square of ' + n + ')?', a: String(sq), hint: n + '² = ' + sq });
+        // direction 2: √sq = ?
+        qs.push({ q: '√' + sq + ' = ? (Square root)', a: String(n), hint: '√' + sq + ' = ' + n });
+      }
+      return qs;
+    })(),
+
+    cubes: (function() {
+      var qs = [];
+      for (var n = 1; n <= 20; n++) {
+        var cb = n * n * n;
+        qs.push({ q: 'What is ' + n + '³ (cube of ' + n + ')?', a: String(cb), hint: n + '³ = ' + cb });
+        qs.push({ q: 'Cube root of ' + cb + ' = ?', a: String(n), hint: '∛' + cb + ' = ' + n });
+      }
+      return qs;
+    })(),
+
+    alphabets: (function() {
+      var qs = [];
+      var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      letters.forEach(function(l, i) {
+        var val = i + 1;
+        qs.push({ q: 'Alphabet value of  ' + l + '  = ?', a: String(val), hint: l + ' = ' + val });
+        qs.push({ q: 'Which letter has alphabet value  ' + val + '  ?', a: l, hint: val + ' → ' + l });
+      });
+      return qs;
+    })(),
+
+    fractions: [
+      // 1/n ↔ %
+      { q: '1/1 = ? %', a: '100', hint: '1/1 = 100%' },
+      { q: '100% = 1/? (denominator)', a: '1', hint: '100% = 1/1' },
+      { q: '1/2 = ? %', a: '50', hint: '1/2 = 50%' },
+      { q: '50% = 1/? (denominator)', a: '2', hint: '50% = 1/2' },
+      { q: '1/3 = ? % (approx 2 dec)', a: '33.33', hint: '1/3 ≈ 33.33%' },
+      { q: '33.33% ≈ 1/? (denominator)', a: '3', hint: '33.33% ≈ 1/3' },
+      { q: '1/4 = ? %', a: '25', hint: '1/4 = 25%' },
+      { q: '25% = 1/? (denominator)', a: '4', hint: '25% = 1/4' },
+      { q: '1/5 = ? %', a: '20', hint: '1/5 = 20%' },
+      { q: '20% = 1/? (denominator)', a: '5', hint: '20% = 1/5' },
+      { q: '1/6 = ? % (approx 2 dec)', a: '16.67', hint: '1/6 ≈ 16.67%' },
+      { q: '16.67% ≈ 1/? (denominator)', a: '6', hint: '16.67% ≈ 1/6' },
+      { q: '1/7 = ? % (approx 2 dec)', a: '14.28', hint: '1/7 ≈ 14.28%' },
+      { q: '14.28% ≈ 1/? (denominator)', a: '7', hint: '14.28% ≈ 1/7' },
+      { q: '1/8 = ? %', a: '12.5', hint: '1/8 = 12.5%' },
+      { q: '12.5% = 1/? (denominator)', a: '8', hint: '12.5% = 1/8' },
+      { q: '1/9 = ? % (approx 2 dec)', a: '11.11', hint: '1/9 ≈ 11.11%' },
+      { q: '11.11% ≈ 1/? (denominator)', a: '9', hint: '11.11% ≈ 1/9' },
+      { q: '1/10 = ? %', a: '10', hint: '1/10 = 10%' },
+      { q: '10% = 1/? (denominator)', a: '10', hint: '10% = 1/10' },
+      { q: '1/11 = ? % (approx 2 dec)', a: '9.09', hint: '1/11 ≈ 9.09%' },
+      { q: '9.09% ≈ 1/? (denominator)', a: '11', hint: '9.09% ≈ 1/11' },
+      { q: '1/12 = ? % (approx 2 dec)', a: '8.33', hint: '1/12 ≈ 8.33%' },
+      { q: '8.33% ≈ 1/? (denominator)', a: '12', hint: '8.33% ≈ 1/12' },
+      { q: '1/13 = ? % (approx 2 dec)', a: '7.69', hint: '1/13 ≈ 7.69%' },
+      { q: '7.69% ≈ 1/? (denominator)', a: '13', hint: '7.69% ≈ 1/13' },
+      { q: '1/14 = ? % (approx 2 dec)', a: '7.14', hint: '1/14 ≈ 7.14%' },
+      { q: '7.14% ≈ 1/? (denominator)', a: '14', hint: '7.14% ≈ 1/14' },
+      { q: '1/15 = ? % (approx 2 dec)', a: '6.66', hint: '1/15 ≈ 6.66%' },
+      { q: '6.66% ≈ 1/? (denominator)', a: '15', hint: '6.66% ≈ 1/15' },
+      { q: '1/16 = ? %', a: '6.25', hint: '1/16 = 6.25%' },
+      { q: '6.25% = 1/? (denominator)', a: '16', hint: '6.25% = 1/16' },
+      { q: '1/17 = ? % (approx 2 dec)', a: '5.88', hint: '1/17 ≈ 5.88%' },
+      { q: '5.88% ≈ 1/? (denominator)', a: '17', hint: '5.88% ≈ 1/17' },
+      { q: '1/18 = ? % (approx 2 dec)', a: '5.55', hint: '1/18 ≈ 5.55%' },
+      { q: '5.55% ≈ 1/? (denominator)', a: '18', hint: '5.55% ≈ 1/18' },
+      { q: '1/19 = ? % (approx 2 dec)', a: '5.26', hint: '1/19 ≈ 5.26%' },
+      { q: '5.26% ≈ 1/? (denominator)', a: '19', hint: '5.26% ≈ 1/19' },
+      { q: '1/20 = ? %', a: '5', hint: '1/20 = 5%' },
+      { q: '5% = 1/? (denominator)', a: '20', hint: '5% = 1/20' },
+      { q: '1/25 = ? %', a: '4', hint: '1/25 = 4%' },
+      { q: '4% = 1/? (denominator)', a: '25', hint: '4% = 1/25' },
+      { q: '1/50 = ? %', a: '2', hint: '1/50 = 2%' },
+      { q: '2% = 1/? (denominator)', a: '50', hint: '2% = 1/50' },
+      // Special fractions
+      { q: '2/9 = ? % (approx 2 dec)', a: '22.22', hint: '2/9 ≈ 22.22%' },
+      { q: '22.22% ≈ ?/9 (numerator)', a: '2', hint: '22.22% ≈ 2/9' },
+      { q: '4/9 = ? % (approx 2 dec)', a: '44.44', hint: '4/9 ≈ 44.44%' },
+      { q: '44.44% ≈ ?/9 (numerator)', a: '4', hint: '44.44% ≈ 4/9' },
+      { q: '5/9 = ? % (approx 2 dec)', a: '55.55', hint: '5/9 ≈ 55.55%' },
+      { q: '55.55% ≈ ?/9 (numerator)', a: '5', hint: '55.55% ≈ 5/9' },
+      { q: '7/9 = ? % (approx 2 dec)', a: '77.77', hint: '7/9 ≈ 77.77%' },
+      { q: '77.77% ≈ ?/9 (numerator)', a: '7', hint: '77.77% ≈ 7/9' },
+      { q: '8/9 = ? % (approx 2 dec)', a: '88.88', hint: '8/9 ≈ 88.88%' },
+      { q: '88.88% ≈ ?/9 (numerator)', a: '8', hint: '88.88% ≈ 8/9' },
+      // /11 family
+      { q: '2/11 = ? % (approx 2 dec)', a: '18.18', hint: '2/11 ≈ 18.18%' },
+      { q: '18.18% ≈ ?/11 (numerator)', a: '2', hint: '18.18% ≈ 2/11' },
+      { q: '3/11 = ? % (approx 2 dec)', a: '27.27', hint: '3/11 ≈ 27.27%' },
+      { q: '27.27% ≈ ?/11 (numerator)', a: '3', hint: '27.27% ≈ 3/11' },
+      { q: '4/11 = ? % (approx 2 dec)', a: '36.36', hint: '4/11 ≈ 36.36%' },
+      { q: '36.36% ≈ ?/11 (numerator)', a: '4', hint: '36.36% ≈ 4/11' },
+      { q: '5/11 = ? % (approx 2 dec)', a: '45.45', hint: '5/11 ≈ 45.45%' },
+      { q: '45.45% ≈ ?/11 (numerator)', a: '5', hint: '45.45% ≈ 5/11' },
+      { q: '6/11 = ? % (approx 2 dec)', a: '54.54', hint: '6/11 ≈ 54.54%' },
+      { q: '54.54% ≈ ?/11 (numerator)', a: '6', hint: '54.54% ≈ 6/11' },
+      { q: '7/11 = ? % (approx 2 dec)', a: '63.63', hint: '7/11 ≈ 63.63%' },
+      { q: '63.63% ≈ ?/11 (numerator)', a: '7', hint: '63.63% ≈ 7/11' },
+      { q: '8/11 = ? % (approx 2 dec)', a: '72.72', hint: '8/11 ≈ 72.72%' },
+      { q: '72.72% ≈ ?/11 (numerator)', a: '8', hint: '72.72% ≈ 8/11' },
+      { q: '9/11 = ? % (approx 2 dec)', a: '81.81', hint: '9/11 ≈ 81.81%' },
+      { q: '81.81% ≈ ?/11 (numerator)', a: '9', hint: '81.81% ≈ 9/11' },
+      { q: '10/11 = ? % (approx 1 dec)', a: '90.9', hint: '10/11 ≈ 90.9%' },
+      { q: '90.9% ≈ ?/11 (numerator)', a: '10', hint: '90.9% ≈ 10/11' },
+      // /8 family
+      { q: '3/8 = ? %', a: '37.5', hint: '3/8 = 37.5%' },
+      { q: '37.5% = ?/8 (numerator)', a: '3', hint: '37.5% = 3/8' },
+      { q: '5/8 = ? %', a: '62.5', hint: '5/8 = 62.5%' },
+      { q: '62.5% = ?/8 (numerator)', a: '5', hint: '62.5% = 5/8' },
+      { q: '7/8 = ? %', a: '87.5', hint: '7/8 = 87.5%' },
+      { q: '87.5% = ?/8 (numerator)', a: '7', hint: '87.5% = 7/8' },
+      // /5 and /4 family
+      { q: '2/5 = ? %', a: '40', hint: '2/5 = 40%' },
+      { q: '40% = ?/5 (numerator)', a: '2', hint: '40% = 2/5' },
+      { q: '3/5 = ? %', a: '60', hint: '3/5 = 60%' },
+      { q: '60% = ?/5 (numerator)', a: '3', hint: '60% = 3/5' },
+      { q: '4/5 = ? %', a: '80', hint: '4/5 = 80%' },
+      { q: '80% = ?/5 (numerator)', a: '4', hint: '80% = 4/5' },
+      { q: '3/4 = ? %', a: '75', hint: '3/4 = 75%' },
+      { q: '75% = ?/4 (numerator)', a: '3', hint: '75% = 3/4' },
+      { q: '5/6 = ? % (approx 2 dec)', a: '83.33', hint: '5/6 ≈ 83.33%' },
+      { q: '83.33% ≈ ?/6 (numerator)', a: '5', hint: '83.33% ≈ 5/6' },
+      // /7 family
+      { q: '2/7 = ? % (approx 2 dec)', a: '28.57', hint: '2/7 ≈ 28.57%' },
+      { q: '28.57% ≈ ?/7 (numerator)', a: '2', hint: '28.57% ≈ 2/7' },
+      { q: '3/7 = ? % (approx 2 dec)', a: '42.85', hint: '3/7 ≈ 42.85%' },
+      { q: '42.85% ≈ ?/7 (numerator)', a: '3', hint: '42.85% ≈ 3/7' },
+      { q: '4/7 = ? % (approx 2 dec)', a: '57.14', hint: '4/7 ≈ 57.14%' },
+      { q: '57.14% ≈ ?/7 (numerator)', a: '4', hint: '57.14% ≈ 4/7' },
+      { q: '5/7 = ? % (approx 2 dec)', a: '71.42', hint: '5/7 ≈ 71.42%' },
+      { q: '71.42% ≈ ?/7 (numerator)', a: '5', hint: '71.42% ≈ 5/7' },
+      { q: '6/7 = ? % (approx 2 dec)', a: '85.71', hint: '6/7 ≈ 85.71%' },
+      { q: '85.71% ≈ ?/7 (numerator)', a: '6', hint: '85.71% ≈ 6/7' }
+    ]
+  };
+
+  var LABELS = {
+    squares: 'Squares & Square Roots',
+    cubes: 'Cubes & Cube Roots',
+    alphabets: 'Alphabet Values',
+    fractions: 'Percentage ↔ Fraction'
+  };
+
+  // ── STATE ─────────────────────────────────────────────
+  var state = {
+    cat: 'squares',
+    queue: [],
+    current: null,
+    answered: false,
+    stats: {} // loaded from localStorage
+  };
+
+  var STATS_KEY = 'cq_stats_v1';
+
+  function loadStats() {
+    try { state.stats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch(e) { state.stats = {}; }
+    ['squares','cubes','alphabets','fractions'].forEach(function(c) {
+      if (!state.stats[c]) state.stats[c] = { attempted: 0, correct: 0, wrong: 0, streak: 0, bestStreak: 0 };
+    });
+  }
+
+  function saveStats() {
+    localStorage.setItem(STATS_KEY, JSON.stringify(state.stats));
+  }
+
+  function getSessionStats() {
+    // session stats stored in memory
+    return state.sessionStats || (state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 });
+  }
+
+  function resetSessionStats() {
+    state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 };
+  }
+
+  // ── QUEUE ─────────────────────────────────────────────
+  function buildQueue() {
+    var pool = DATA[state.cat].slice();
+    // Fisher-Yates shuffle
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    state.queue = pool;
+  }
+
+  function nextQuestion() {
+    if (state.queue.length === 0) buildQueue();
+    state.current = state.queue.pop();
+    state.answered = false;
+    renderQuestion();
+  }
+
+  // ── RENDER ────────────────────────────────────────────
+  function renderQuestion() {
+    var q = state.current;
+    document.getElementById('cq-question-label').textContent = LABELS[state.cat];
+    document.getElementById('cq-question').textContent = q.q;
+    // reset input
+    var inp = document.getElementById('cq-answer-input');
+    inp.value = '';
+    inp.className = 'cq-answer-input';
+    inp.disabled = false;
+    inp.focus();
+    // hide feedback & next
+    document.getElementById('cq-feedback').style.display = 'none';
+    document.getElementById('cq-next-btn').style.display = 'none';
+    document.getElementById('cq-submit-btn').disabled = false;
+    renderSessionStats();
+  }
+
+  function renderSessionStats() {
+    var ss = getSessionStats();
+    document.getElementById('cq-stat-attempted').textContent = ss.attempted;
+    document.getElementById('cq-stat-correct').textContent   = ss.correct;
+    document.getElementById('cq-stat-wrong').textContent     = ss.wrong;
+    document.getElementById('cq-stat-streak').textContent    = ss.streak + '🔥';
+  }
+
+  function renderCatStats() {
+    var s = state.stats[state.cat];
+    var acc = s.attempted > 0 ? Math.round((s.correct / s.attempted) * 100) : 0;
+    var grid = document.getElementById('cq-cat-stats-grid');
+    grid.innerHTML =
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Attempted</span><span class="cq-cat-stat-item-val">' + s.attempted + '</span></div>' +
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Correct</span><span class="cq-cat-stat-item-val" style="color:var(--green)">' + s.correct + '</span></div>' +
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Wrong</span><span class="cq-cat-stat-item-val" style="color:var(--red)">' + s.wrong + '</span></div>' +
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Accuracy</span><span class="cq-cat-stat-item-val">' + acc + '%</span></div>' +
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Best Streak</span><span class="cq-cat-stat-item-val" style="color:var(--accent)">' + s.bestStreak + '🔥</span></div>' +
+      '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Total Qs</span><span class="cq-cat-stat-item-val">' + DATA[state.cat].length + '</span></div>';
+  }
+
+  // ── ANSWER CHECK ──────────────────────────────────────
+  function normaliseAns(v) {
+    return v.trim().replace(/\s+/g, '').toUpperCase();
+  }
+
+  function checkAnswer() {
+    if (state.answered || !state.current) return;
+    var inp = document.getElementById('cq-answer-input');
+    var userAns = normaliseAns(inp.value);
+    if (!userAns) { inp.focus(); return; }
+
+    state.answered = true;
+    var correct = (userAns === normaliseAns(state.current.a));
+
+    // update session stats
+    var ss = getSessionStats();
+    ss.attempted++;
+    if (correct) {
+      ss.correct++;
+      ss.streak++;
+    } else {
+      ss.wrong++;
+      ss.streak = 0;
+    }
+
+    // update persistent stats
+    var ps = state.stats[state.cat];
+    ps.attempted++;
+    if (correct) {
+      ps.correct++;
+      ps.streak++;
+      if (ps.streak > ps.bestStreak) ps.bestStreak = ps.streak;
+    } else {
+      ps.wrong++;
+      ps.streak = 0;
+    }
+    saveStats();
+    renderCatStats();
+
+    // UI feedback
+    inp.disabled = true;
+    document.getElementById('cq-submit-btn').disabled = true;
+
+    var feedbackEl = document.getElementById('cq-feedback');
+    var iconEl     = document.getElementById('cq-feedback-icon');
+    var msgEl      = document.getElementById('cq-feedback-msg');
+    var ansEl      = document.getElementById('cq-correct-ans');
+
+    feedbackEl.style.display = 'block';
+    if (correct) {
+      inp.classList.add('cq-input-correct');
+      iconEl.textContent = '✅';
+      msgEl.textContent  = 'Correct! Well done!';
+      msgEl.className    = 'cq-feedback-msg correct';
+      ansEl.innerHTML    = '<strong>' + state.current.hint + '</strong>';
+    } else {
+      inp.classList.add('cq-input-wrong');
+      iconEl.textContent = '❌';
+      msgEl.textContent  = 'Wrong! Your answer: ' + inp.value.trim();
+      msgEl.className    = 'cq-feedback-msg wrong';
+      ansEl.innerHTML    = 'Correct Answer: <strong>' + state.current.hint + '</strong>';
+    }
+
+    document.getElementById('cq-next-btn').style.display = 'block';
+    renderSessionStats();
+  }
+
+  // ── INIT ──────────────────────────────────────────────
+  function init() {
+    loadStats();
+
+    // home button
+    document.getElementById('btn-cheatquiz').addEventListener('click', function() {
+      showScreen('cheatquiz');
+      resetSessionStats();
+      buildQueue();
+      nextQuestion();
+      renderCatStats();
+    });
+
+    document.getElementById('btn-cheatquiz-home').addEventListener('click', function() {
+      showScreen('home');
+    });
+
+    // category tabs
+    document.querySelectorAll('.cq-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.cq-tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        state.cat = tab.dataset.cat;
+        resetSessionStats();
+        buildQueue();
+        nextQuestion();
+        renderCatStats();
+      });
+    });
+
+    // submit button
+    document.getElementById('cq-submit-btn').addEventListener('click', checkAnswer);
+
+    // Enter key on input
+    document.getElementById('cq-answer-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        if (!state.answered) checkAnswer();
+        else nextQuestion();
+      }
+    });
+
+    // next button
+    document.getElementById('cq-next-btn').addEventListener('click', function() {
+      nextQuestion();
+    });
+
+    // reset category stats
+    document.getElementById('cq-reset-cat-btn').addEventListener('click', function() {
+      if (!confirm('Reset all stats for "' + LABELS[state.cat] + '"?')) return;
+      state.stats[state.cat] = { attempted: 0, correct: 0, wrong: 0, streak: 0, bestStreak: 0 };
+      saveStats();
+      renderCatStats();
+      showToast('Stats reset for ' + LABELS[state.cat]);
+    });
+  }
+
+  return { init: init };
+})();
+
+// Call init after DOM is ready — attach to DOMContentLoaded or just call now since script is deferred
+(function() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', CQ.init);
+  } else {
+    CQ.init();
+  }
+})();
