@@ -832,12 +832,26 @@
       <h2 class="cq-title">📐 Cheat Sheet Quiz</h2>
     </div>
 
+    <!-- Mode Toggle -->
+    <div class="cq-mode-toggle" id="cq-mode-toggle">
+      <button class="cq-mode-btn active" id="cq-mode-free" data-mode="free">🧘 No Timer</button>
+      <button class="cq-mode-btn" id="cq-mode-timed" data-mode="timed">⏱ 7 sec Timer</button>
+    </div>
+
     <!-- Category Tabs -->
     <div class="cq-tab-bar" id="cq-tab-bar">
       <button class="cq-tab active" data-cat="squares">²  Squares</button>
       <button class="cq-tab" data-cat="cubes">³  Cubes</button>
       <button class="cq-tab" data-cat="alphabets">🔤 Alphabets</button>
       <button class="cq-tab" data-cat="fractions">% Fractions</button>
+    </div>
+
+    <!-- Timer Bar (hidden in free mode) -->
+    <div class="cq-timer-wrap" id="cq-timer-wrap" style="display:none">
+      <div class="cq-timer-bar-track">
+        <div class="cq-timer-bar-fill" id="cq-timer-bar-fill"></div>
+      </div>
+      <span class="cq-timer-label" id="cq-timer-label">7</span>
     </div>
 
     <!-- Stats Row -->
