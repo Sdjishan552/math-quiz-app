@@ -4346,7 +4346,97 @@ canvas {
   flex-shrink: 0;
 }
 
-@media (max-width: 520px) {
+
+/* ── Profile Activity Heatmap ─────────────────────────────── */
+.profile-heatmap-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-heatmap-sub {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.profile-heatmap-wrap {
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-top: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+.profile-heatmap-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  gap: 3px;
+  width: max-content;
+}
+
+.heatmap-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.heatmap-l0 { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.04); }
+.heatmap-l1 { background: rgba(0,212,255,0.22); }
+.heatmap-l2 { background: rgba(0,212,255,0.45); }
+.heatmap-l3 { background: rgba(57,255,138,0.55); }
+.heatmap-l4 { background: #39ff8a; box-shadow: 0 0 6px rgba(57,255,138,0.4); }
+
+.heatmap-cell[data-tip] {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.heatmap-cell[data-tip]:hover {
+  transform: scale(1.4);
+  z-index: 2;
+  position: relative;
+  box-shadow: 0 0 10px rgba(255,255,255,0.2);
+}
+
+.profile-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.heatmap-legend-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.heatmap-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: rgba(20,22,36,0.98);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--white);
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  transform: translateX(-50%);
+  transition: opacity 0.1s ease;
+}
+
   .quiz-action-row {
     flex-direction: column;
     align-items: stretch;
