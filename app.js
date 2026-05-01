@@ -2623,7 +2623,77 @@ function getStudyIdentity(stats) {
   };
 }
 
-function renderProfileTimeline(history) {
+function renderProfileHeatmap(history) {
+  var wrap = document.getElementById('profile-heatmap-wrap');
+  if (!wrap) return;
+
+  // Build day -> count map for last 90 days
+  var DAYS = 90;
+  var dayMap = {};
+  history.forEach(function(item) {
+    var dk = dayKeyFromDate(item.date);
+    if (dk) dayMap[dk] = (dayMap[dk] || 0) + (item.total || 0);
+  });
+
+  // Generate all 90 day keys from oldest to today
+  var today = new Date();
+  var keys = [];
+  for (var i = DAYS - 1; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(d.getDate() - i);
+    keys.push(d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()));
+  }
+
+  // Find max for intensity scaling
+  var maxVal = 0;
+  keys.forEach(function(k) { if (dayMap[k] > maxVal) maxVal = dayMap[k]; });
+  if (maxVal === 0) maxVal = 1;
+
+  // Render grid cells
+  var cells = keys.map(function(k) {
+    var count = dayMap[k] || 0;
+    var level = 0;
+    if (count > 0) {
+      var ratio = count / maxVal;
+      if (ratio >= 0.75) level = 4;
+      else if (ratio >= 0.45) level = 3;
+      else if (ratio >= 0.2)  level = 2;
+      else level = 1;
+    }
+    var parts = k.split('-');
+    var label = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+      .toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    var tip = count > 0 ? label + ' · ' + count + ' question' + (count !== 1 ? 's' : '') : label + ' · No practice';
+    return '<span class="heatmap-cell heatmap-l' + level + '" data-tip="' + tip + '" data-count="' + count + '"></span>';
+  }).join('');
+
+  wrap.innerHTML = '<div class="profile-heatmap-grid">' + cells + '</div>';
+
+  // Tooltip
+  var tooltip = document.getElementById('heatmap-tooltip-el');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'heatmap-tooltip-el';
+    tooltip.className = 'heatmap-tooltip';
+    tooltip.style.display = 'none';
+    document.body.appendChild(tooltip);
+  }
+
+  wrap.querySelectorAll('.heatmap-cell[data-tip]').forEach(function(cell) {
+    cell.addEventListener('mouseenter', function(e) {
+      tooltip.textContent = cell.dataset.tip;
+      tooltip.style.display = 'block';
+      var rect = cell.getBoundingClientRect();
+      tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+      tooltip.style.top = (rect.top - 38 + window.scrollY) + 'px';
+    });
+    cell.addEventListener('mouseleave', function() {
+      tooltip.style.display = 'none';
+    });
+  });
+}
+
+
   var container = document.getElementById('profile-timeline-list');
   if (!container) return;
 
@@ -2690,7 +2760,7 @@ function renderProfileScreen(knownStats) {
   document.getElementById('profile-name-input').value = stats.profile.displayName;
   document.getElementById('profile-tagline-input').value = stats.profile.tagline;
   document.getElementById('profile-goal-select').value = String(stats.profile.dailyGoal);
-  document.getElementById('profile-save-hint').textContent = stats.profile.tagline;
+  document.getElementById('profile-save-hint').textContent = 'Customize your profile and tap Save to keep changes.';
 
   populateProfileTitleOptions(stats.levelInfo.level, stats.profile.title);
   renderProfileAvatarPicker(stats.profile.avatar);
@@ -2722,6 +2792,7 @@ function renderProfileScreen(knownStats) {
   document.getElementById('profile-insight-body').textContent = insight.body;
 
   renderProfileTimeline(stats.history);
+  renderProfileHeatmap(stats.history);
 }
 
 function showProfileScreen() {
