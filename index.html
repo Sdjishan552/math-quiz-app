@@ -879,9 +879,17 @@
       <div class="cq-question-label" id="cq-question-label">Category</div>
       <div class="cq-question" id="cq-question">Question appears here</div>
 
-      <div class="cq-input-row">
+      <!-- Single answer input (squares, cubes, alphabets, fraction→%) -->
+      <div class="cq-input-row" id="cq-input-row-single">
         <input class="cq-answer-input" id="cq-answer-input" type="text" inputmode="decimal" placeholder="Type your answer…" autocomplete="off" autocorrect="off" spellcheck="false" />
         <button class="btn cq-submit-btn" id="cq-submit-btn">✓</button>
+      </div>
+      <!-- Fraction input: numerator / denominator (fraction← % questions) -->
+      <div class="cq-input-row cq-fraction-row" id="cq-input-row-fraction" style="display:none">
+        <input class="cq-answer-input cq-frac-num" id="cq-frac-num" type="text" inputmode="numeric" placeholder="1" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <span class="cq-frac-divider">/</span>
+        <input class="cq-answer-input cq-frac-den" id="cq-frac-den" type="text" inputmode="numeric" placeholder="1" autocomplete="off" autocorrect="off" spellcheck="false" value="1" />
+        <button class="btn cq-submit-btn" id="cq-submit-btn-frac">✓</button>
       </div>
 
       <!-- Feedback -->
