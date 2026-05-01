@@ -5722,10 +5722,18 @@ var CQ = (function() {
     saveStats();
     renderCatStats();
 
-    var inp = document.getElementById('cq-answer-input');
-    inp.disabled = true;
-    inp.classList.add('cq-input-wrong');
-    document.getElementById('cq-submit-btn').disabled = true;
+    if (isFracInputQ()) {
+      var fn = document.getElementById('cq-frac-num');
+      var fd = document.getElementById('cq-frac-den');
+      fn.disabled = true; fn.classList.add('cq-input-wrong');
+      fd.disabled = true; fd.classList.add('cq-input-wrong');
+      document.getElementById('cq-submit-btn-frac').disabled = true;
+    } else {
+      var inp = document.getElementById('cq-answer-input');
+      inp.disabled = true;
+      inp.classList.add('cq-input-wrong');
+      document.getElementById('cq-submit-btn').disabled = true;
+    }
 
     var feedbackEl = document.getElementById('cq-feedback');
     feedbackEl.style.display = 'block';
@@ -5758,30 +5766,57 @@ var CQ = (function() {
   }
 
   // ── RENDER ────────────────────────────────────────────
+  // helper: is this a "write as fraction" question?
+  function isFracInputQ() {
+    return state.cat === 'fractions' && state.current && state.current.q.indexOf('=  ?%') === -1;
+  }
+
   function renderQuestion() {
     var q = state.current;
     document.getElementById('cq-question-label').textContent = LABELS[state.cat];
     document.getElementById('cq-question').textContent = q.q;
 
-    var inp = document.getElementById('cq-answer-input');
-    inp.value = '';
-    inp.className = 'cq-answer-input';
-    inp.disabled = false;
-    if (state.cat === 'fractions') {
-      inp.placeholder = (q.q.indexOf('=  ?%') !== -1) ? 'e.g. 33.33' : 'e.g. 1/3';
-    } else if (state.cat === 'alphabets') {
-      inp.placeholder = (q.q.indexOf('Which letter') !== -1) ? 'e.g. A' : 'e.g. 13';
-    } else {
-      inp.placeholder = 'Type your answer…';
-    }
+    var useFrac = isFracInputQ();
+    document.getElementById('cq-input-row-single').style.display   = useFrac ? 'none' : 'flex';
+    document.getElementById('cq-input-row-fraction').style.display = useFrac ? 'flex' : 'none';
 
     document.getElementById('cq-feedback').style.display = 'none';
     document.getElementById('cq-next-btn').style.display = 'none';
-    document.getElementById('cq-submit-btn').disabled = false;
-    renderSessionStats();
-    // reset timer bar visually
-    renderTimerBar(TIMER_SEC);
-    setTimeout(function() { inp.focus(); }, 80);
+
+    if (useFrac) {
+      var numEl = document.getElementById('cq-frac-num');
+      var denEl = document.getElementById('cq-frac-den');
+      numEl.value = '';
+      denEl.value = '1';
+      numEl.className = 'cq-answer-input cq-frac-num';
+      denEl.className = 'cq-answer-input cq-frac-den';
+      numEl.disabled = false;
+      denEl.disabled = false;
+      document.getElementById('cq-submit-btn-frac').disabled = false;
+      renderSessionStats();
+      renderTimerBar(TIMER_SEC);
+      setTimeout(function() { numEl.focus(); }, 80);
+    } else {
+      var inp = document.getElementById('cq-answer-input');
+      inp.value = '';
+      inp.className = 'cq-answer-input';
+      inp.disabled = false;
+      if (state.cat === 'alphabets') {
+        var isLetterQ = q.q.indexOf('Which letter') !== -1;
+        inp.setAttribute('inputmode', isLetterQ ? 'text' : 'numeric');
+        inp.placeholder = isLetterQ ? 'e.g. A' : 'e.g. 13';
+      } else if (state.cat === 'fractions') {
+        inp.setAttribute('inputmode', 'decimal');
+        inp.placeholder = 'e.g. 33.33';
+      } else {
+        inp.setAttribute('inputmode', 'numeric');
+        inp.placeholder = 'Type your answer…';
+      }
+      document.getElementById('cq-submit-btn').disabled = false;
+      renderSessionStats();
+      renderTimerBar(TIMER_SEC);
+      setTimeout(function() { inp.focus(); }, 80);
+    }
   }
 
   function renderSessionStats() {
@@ -5809,9 +5844,17 @@ var CQ = (function() {
 
   function checkAnswer() {
     if (state.answered || !state.current) return;
-    var inp = document.getElementById('cq-answer-input');
-    var userRaw = inp.value.trim();
-    if (!userRaw) { inp.focus(); return; }
+    var userRaw;
+    if (isFracInputQ()) {
+      var num = document.getElementById('cq-frac-num').value.trim();
+      var den = document.getElementById('cq-frac-den').value.trim() || '1';
+      if (!num) { document.getElementById('cq-frac-num').focus(); return; }
+      userRaw = num + '/' + den;
+    } else {
+      var inp = document.getElementById('cq-answer-input');
+      userRaw = inp.value.trim();
+      if (!userRaw) { inp.focus(); return; }
+    }
 
     clearTimer();
     state.answered = true;
@@ -5829,21 +5872,34 @@ var CQ = (function() {
     saveStats();
     renderCatStats();
 
-    inp.disabled = true;
-    document.getElementById('cq-submit-btn').disabled = true;
+    if (isFracInputQ()) {
+      document.getElementById('cq-frac-num').disabled = true;
+      document.getElementById('cq-frac-den').disabled = true;
+      document.getElementById('cq-submit-btn-frac').disabled = true;
+    } else {
+      var inp2 = document.getElementById('cq-answer-input');
+      inp2.disabled = true;
+      document.getElementById('cq-submit-btn').disabled = true;
+    }
 
     var feedbackEl = document.getElementById('cq-feedback');
     var msgEl      = document.getElementById('cq-feedback-msg');
     var ansEl      = document.getElementById('cq-correct-ans');
     feedbackEl.style.display = 'block';
     if (correct) {
-      inp.classList.add('cq-input-correct');
+      if (isFracInputQ()) {
+        document.getElementById('cq-frac-num').classList.add('cq-input-correct');
+        document.getElementById('cq-frac-den').classList.add('cq-input-correct');
+      } else { document.getElementById('cq-answer-input').classList.add('cq-input-correct'); }
       document.getElementById('cq-feedback-icon').textContent = '✅';
       msgEl.textContent = 'Correct!';
       msgEl.className   = 'cq-feedback-msg correct';
       ansEl.innerHTML   = '<strong>' + state.current.hint + '</strong>';
     } else {
-      inp.classList.add('cq-input-wrong');
+      if (isFracInputQ()) {
+        document.getElementById('cq-frac-num').classList.add('cq-input-wrong');
+        document.getElementById('cq-frac-den').classList.add('cq-input-wrong');
+      } else { document.getElementById('cq-answer-input').classList.add('cq-input-wrong'); }
       document.getElementById('cq-feedback-icon').textContent = '❌';
       msgEl.textContent = 'Wrong — you wrote: ' + userRaw;
       msgEl.className   = 'cq-feedback-msg wrong';
@@ -5904,11 +5960,30 @@ var CQ = (function() {
       });
     });
 
-    // submit
+    // submit (single input)
     document.getElementById('cq-submit-btn').addEventListener('click', checkAnswer);
+    // submit (fraction input)
+    document.getElementById('cq-submit-btn-frac').addEventListener('click', checkAnswer);
 
-    // Enter key
+    // Enter key — single input
     document.getElementById('cq-answer-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        if (!state.answered) checkAnswer();
+        else nextQuestion();
+      }
+    });
+    // Enter key — fraction numerator (moves to denominator or submits)
+    document.getElementById('cq-frac-num').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        if (!state.answered) {
+          var den = document.getElementById('cq-frac-den');
+          if (den.value === '1' || den.value === '') { den.select(); den.focus(); }
+          else checkAnswer();
+        } else nextQuestion();
+      }
+    });
+    // Enter key — fraction denominator
+    document.getElementById('cq-frac-den').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         if (!state.answered) checkAnswer();
         else nextQuestion();
