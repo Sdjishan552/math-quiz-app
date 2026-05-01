@@ -5572,32 +5572,16 @@ function _refreshTopicDeleteButtons() {
 
 var CQ = (function() {
 
+  var TIMER_SEC = 7;
+
   // ── DATA ──────────────────────────────────────────────
-  // Each item: { q, a, accept[] (alternate accepted answers), hint }
-  // RULE: the question NEVER reveals the answer side.
-  // Fraction questions: if asked "X% = ?", answer is fraction like "1/3"
-  //                     if asked "X/Y = ?%", answer is decimal like "33.33"
-  // Squares: asked "n² = ?", answer is number; asked "√N = ?", answer is number
-  // Alphabets: asked "A = ?", answer is number; asked "value 1 = ?", answer is letter
-
   var DATA = {
-
     squares: (function() {
       var qs = [];
       for (var n = 11; n <= 50; n++) {
         var sq = n * n;
-        qs.push({
-          q: n + '²  =  ?',
-          a: String(sq),
-          accept: [String(sq)],
-          hint: n + '² = ' + sq
-        });
-        qs.push({
-          q: '√' + sq + '  =  ?',
-          a: String(n),
-          accept: [String(n)],
-          hint: '√' + sq + ' = ' + n
-        });
+        qs.push({ q: n + '²  =  ?', a: String(sq), accept: [String(sq)], hint: n + '² = ' + sq });
+        qs.push({ q: '√' + sq + '  =  ?', a: String(n), accept: [String(n)], hint: '√' + sq + ' = ' + n });
       }
       return qs;
     })(),
@@ -5606,129 +5590,62 @@ var CQ = (function() {
       var qs = [];
       for (var n = 1; n <= 20; n++) {
         var cb = n * n * n;
-        qs.push({
-          q: n + '³  =  ?',
-          a: String(cb),
-          accept: [String(cb)],
-          hint: n + '³ = ' + cb
-        });
-        qs.push({
-          q: '∛' + cb + '  =  ?',
-          a: String(n),
-          accept: [String(n)],
-          hint: '∛' + cb + ' = ' + n
-        });
+        qs.push({ q: n + '³  =  ?', a: String(cb), accept: [String(cb)], hint: n + '³ = ' + cb });
+        qs.push({ q: '∛' + cb + '  =  ?', a: String(n), accept: [String(n)], hint: '∛' + cb + ' = ' + n });
       }
       return qs;
     })(),
 
     alphabets: (function() {
       var qs = [];
-      var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      letters.forEach(function(l, i) {
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(function(l, i) {
         var val = i + 1;
-        qs.push({
-          q: 'Alphabet value of  ' + l + '  =  ?',
-          a: String(val),
-          accept: [String(val)],
-          hint: l + ' = ' + val
-        });
-        qs.push({
-          q: 'Which letter has value  ' + val + '  ?',
-          a: l,
-          accept: [l, l.toLowerCase()],
-          hint: val + ' → ' + l
-        });
+        qs.push({ q: 'Alphabet value of  ' + l + '  =  ?', a: String(val), accept: [String(val)], hint: l + ' = ' + val });
+        qs.push({ q: 'Which letter has value  ' + val + '  ?', a: l, accept: [l, l.toLowerCase()], hint: val + ' → ' + l });
       });
       return qs;
     })(),
 
-    // Fractions:
-    // Direction A: "1/3 = ?%"  → answer "33.33"
-    // Direction B: "33.33% = ?" → answer "1/3"
-    // User types fraction as "1/3" or decimal as "33.33"
     fractions: (function() {
       var pairs = [
-        // [fraction_string, percent_string, accept_variants_for_percent]
-        ['1/1',  '100',   ['100']],
-        ['1/2',  '50',    ['50']],
-        ['1/3',  '33.33', ['33.33', '33.3']],
-        ['1/4',  '25',    ['25']],
-        ['1/5',  '20',    ['20']],
-        ['1/6',  '16.67', ['16.67', '16.66', '16.7']],
-        ['1/7',  '14.28', ['14.28', '14.29']],
-        ['1/8',  '12.5',  ['12.5', '12.50']],
-        ['1/9',  '11.11', ['11.11', '11.1']],
-        ['1/10', '10',    ['10']],
-        ['1/11', '9.09',  ['9.09', '9.1']],
-        ['1/12', '8.33',  ['8.33', '8.3']],
-        ['1/13', '7.69',  ['7.69']],
-        ['1/14', '7.14',  ['7.14']],
-        ['1/15', '6.67',  ['6.67', '6.66']],
-        ['1/16', '6.25',  ['6.25']],
-        ['1/17', '5.88',  ['5.88']],
-        ['1/18', '5.55',  ['5.55', '5.56']],
-        ['1/19', '5.26',  ['5.26']],
-        ['1/20', '5',     ['5']],
-        ['1/25', '4',     ['4']],
-        ['1/50', '2',     ['2']],
-        ['2/9',  '22.22', ['22.22', '22.2']],
-        ['4/9',  '44.44', ['44.44', '44.4']],
-        ['5/9',  '55.55', ['55.55', '55.6']],
-        ['7/9',  '77.77', ['77.77', '77.8']],
-        ['8/9',  '88.88', ['88.88', '88.9']],
-        ['2/11', '18.18', ['18.18', '18.2']],
-        ['3/11', '27.27', ['27.27', '27.3']],
-        ['4/11', '36.36', ['36.36', '36.4']],
-        ['5/11', '45.45', ['45.45', '45.5']],
-        ['6/11', '54.54', ['54.54', '54.5']],
-        ['7/11', '63.63', ['63.63', '63.6']],
-        ['8/11', '72.72', ['72.72', '72.7']],
-        ['9/11', '81.81', ['81.81', '81.8']],
-        ['10/11','90.9',  ['90.9',  '90.91']],
-        ['3/8',  '37.5',  ['37.5', '37.50']],
-        ['5/8',  '62.5',  ['62.5', '62.50']],
-        ['7/8',  '87.5',  ['87.5', '87.50']],
-        ['2/5',  '40',    ['40']],
-        ['3/5',  '60',    ['60']],
-        ['4/5',  '80',    ['80']],
-        ['3/4',  '75',    ['75']],
-        ['5/6',  '83.33', ['83.33', '83.3']],
-        ['2/7',  '28.57', ['28.57']],
-        ['3/7',  '42.85', ['42.85', '42.86']],
-        ['4/7',  '57.14', ['57.14']],
-        ['5/7',  '71.42', ['71.42', '71.43']],
-        ['6/7',  '85.71', ['85.71']]
+        ['1/1','100',['100']], ['1/2','50',['50']], ['1/3','33.33',['33.33','33.3']],
+        ['1/4','25',['25']], ['1/5','20',['20']], ['1/6','16.67',['16.67','16.66','16.7']],
+        ['1/7','14.28',['14.28','14.29']], ['1/8','12.5',['12.5','12.50']],
+        ['1/9','11.11',['11.11','11.1']], ['1/10','10',['10']],
+        ['1/11','9.09',['9.09','9.1']], ['1/12','8.33',['8.33','8.3']],
+        ['1/13','7.69',['7.69']], ['1/14','7.14',['7.14']],
+        ['1/15','6.67',['6.67','6.66']], ['1/16','6.25',['6.25']],
+        ['1/17','5.88',['5.88']], ['1/18','5.55',['5.55','5.56']],
+        ['1/19','5.26',['5.26']], ['1/20','5',['5']],
+        ['1/25','4',['4']], ['1/50','2',['2']],
+        ['2/9','22.22',['22.22','22.2']], ['4/9','44.44',['44.44','44.4']],
+        ['5/9','55.55',['55.55','55.6']], ['7/9','77.77',['77.77','77.8']],
+        ['8/9','88.88',['88.88','88.9']],
+        ['2/11','18.18',['18.18','18.2']], ['3/11','27.27',['27.27','27.3']],
+        ['4/11','36.36',['36.36','36.4']], ['5/11','45.45',['45.45','45.5']],
+        ['6/11','54.54',['54.54','54.5']], ['7/11','63.63',['63.63','63.6']],
+        ['8/11','72.72',['72.72','72.7']], ['9/11','81.81',['81.81','81.8']],
+        ['10/11','90.9',['90.9','90.91']],
+        ['3/8','37.5',['37.5','37.50']], ['5/8','62.5',['62.5','62.50']], ['7/8','87.5',['87.5','87.50']],
+        ['2/5','40',['40']], ['3/5','60',['60']], ['4/5','80',['80']],
+        ['3/4','75',['75']], ['5/6','83.33',['83.33','83.3']],
+        ['2/7','28.57',['28.57']], ['3/7','42.85',['42.85','42.86']],
+        ['4/7','57.14',['57.14']], ['5/7','71.42',['71.42','71.43']],
+        ['6/7','85.71',['85.71']]
       ];
-
       var qs = [];
       pairs.forEach(function(p) {
-        var frac = p[0], pct = p[1], pctVariants = p[2];
-
-        // Direction A: fraction → percent
-        qs.push({
-          q: p[0] + '  =  ?%\n(write decimal, up to 2 places)',
-          a: pct,
-          accept: pctVariants,
-          hint: frac + ' = ' + pct + '%'
-        });
-
-        // Direction B: percent → fraction
-        // accept the canonical fraction plus any equivalent (none here but structure allows it)
-        qs.push({
-          q: pct + '%  =  ?\n(write as fraction, e.g. 1/3)',
-          a: frac,
-          accept: [frac],
-          hint: pct + '% = ' + frac
-        });
+        var frac = p[0], pct = p[1], pctV = p[2];
+        qs.push({ q: p[0] + '  =  ?%\n(decimal, up to 2 places)', a: pct, accept: pctV, hint: frac + ' = ' + pct + '%' });
+        qs.push({ q: pct + '%  =  ?\n(write as fraction, e.g. 1/3)', a: frac, accept: [frac], hint: pct + '% = ' + frac });
       });
       return qs;
     })()
   };
 
   var LABELS = {
-    squares:   'Squares & Square Roots',
-    cubes:     'Cubes & Cube Roots',
+    squares: 'Squares & Square Roots',
+    cubes: 'Cubes & Cube Roots',
     alphabets: 'Alphabet Values',
     fractions: 'Percentage ↔ Fraction'
   };
@@ -5736,11 +5653,14 @@ var CQ = (function() {
   // ── STATE ─────────────────────────────────────────────
   var state = {
     cat: 'squares',
+    mode: 'free',       // 'free' | 'timed'
     queue: [],
     current: null,
     answered: false,
     sessionStats: null,
-    stats: {}
+    stats: {},
+    timerInterval: null,
+    timerLeft: TIMER_SEC
   };
 
   var STATS_KEY = 'cq_stats_v2';
@@ -5751,17 +5671,71 @@ var CQ = (function() {
       if (!state.stats[c]) state.stats[c] = { attempted: 0, correct: 0, wrong: 0, streak: 0, bestStreak: 0 };
     });
   }
+  function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(state.stats)); }
+  function getSessionStats() { return state.sessionStats || (state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 }); }
+  function resetSessionStats() { state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 }; }
 
-  function saveStats() {
-    localStorage.setItem(STATS_KEY, JSON.stringify(state.stats));
+  // ── TIMER ─────────────────────────────────────────────
+  function startTimer() {
+    clearTimer();
+    state.timerLeft = TIMER_SEC;
+    renderTimerBar(TIMER_SEC);
+    state.timerInterval = setInterval(function() {
+      state.timerLeft -= 0.05;
+      renderTimerBar(state.timerLeft);
+      if (state.timerLeft <= 0) {
+        clearTimer();
+        timeUp();
+      }
+    }, 50);
   }
 
-  function getSessionStats() {
-    return state.sessionStats || (state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 });
+  function clearTimer() {
+    if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
   }
 
-  function resetSessionStats() {
-    state.sessionStats = { attempted: 0, correct: 0, wrong: 0, streak: 0 };
+  function renderTimerBar(left) {
+    var pct = Math.max(0, (left / TIMER_SEC) * 100);
+    var fill = document.getElementById('cq-timer-bar-fill');
+    var label = document.getElementById('cq-timer-label');
+    if (!fill) return;
+    fill.style.width = pct + '%';
+    // colour: green → yellow → red
+    var r, g;
+    if (pct > 50) { r = Math.round(255 * (1 - (pct - 50) / 50)); g = 220; }
+    else           { r = 255; g = Math.round(220 * (pct / 50)); }
+    fill.style.background = 'rgb(' + r + ',' + g + ',60)';
+    label.textContent = Math.ceil(Math.max(0, left));
+    // pulse red when ≤ 2 sec
+    fill.classList.toggle('cq-timer-urgent', left <= 2);
+  }
+
+  function timeUp() {
+    if (state.answered) return;
+    state.answered = true;
+
+    // count as wrong / attempted
+    var ss = getSessionStats();
+    ss.attempted++; ss.wrong++; ss.streak = 0;
+    var ps = state.stats[state.cat];
+    ps.attempted++; ps.wrong++; ps.streak = 0;
+    saveStats();
+    renderCatStats();
+
+    var inp = document.getElementById('cq-answer-input');
+    inp.disabled = true;
+    inp.classList.add('cq-input-wrong');
+    document.getElementById('cq-submit-btn').disabled = true;
+
+    var feedbackEl = document.getElementById('cq-feedback');
+    feedbackEl.style.display = 'block';
+    document.getElementById('cq-feedback-icon').textContent = '⏰';
+    var msgEl = document.getElementById('cq-feedback-msg');
+    msgEl.textContent = 'Time\'s up!';
+    msgEl.className = 'cq-feedback-msg wrong';
+    document.getElementById('cq-correct-ans').innerHTML = 'Answer: <strong>' + state.current.hint + '</strong>';
+    document.getElementById('cq-next-btn').style.display = 'block';
+    renderSessionStats();
   }
 
   // ── QUEUE ─────────────────────────────────────────────
@@ -5775,10 +5749,12 @@ var CQ = (function() {
   }
 
   function nextQuestion() {
+    clearTimer();
     if (state.queue.length === 0) buildQueue();
     state.current = state.queue.pop();
     state.answered = false;
     renderQuestion();
+    if (state.mode === 'timed') startTimer();
   }
 
   // ── RENDER ────────────────────────────────────────────
@@ -5791,14 +5767,10 @@ var CQ = (function() {
     inp.value = '';
     inp.className = 'cq-answer-input';
     inp.disabled = false;
-
-    // set placeholder based on category
     if (state.cat === 'fractions') {
-      var isFracQ = q.q.indexOf('=  ?%') !== -1;
-      inp.placeholder = isFracQ ? 'e.g. 33.33' : 'e.g. 1/3';
+      inp.placeholder = (q.q.indexOf('=  ?%') !== -1) ? 'e.g. 33.33' : 'e.g. 1/3';
     } else if (state.cat === 'alphabets') {
-      var isLetterQ = q.q.indexOf('Which letter') !== -1;
-      inp.placeholder = isLetterQ ? 'e.g. A' : 'e.g. 13';
+      inp.placeholder = (q.q.indexOf('Which letter') !== -1) ? 'e.g. A' : 'e.g. 13';
     } else {
       inp.placeholder = 'Type your answer…';
     }
@@ -5807,7 +5779,8 @@ var CQ = (function() {
     document.getElementById('cq-next-btn').style.display = 'none';
     document.getElementById('cq-submit-btn').disabled = false;
     renderSessionStats();
-    // focus after small delay to avoid mobile keyboard issues
+    // reset timer bar visually
+    renderTimerBar(TIMER_SEC);
     setTimeout(function() { inp.focus(); }, 80);
   }
 
@@ -5822,8 +5795,7 @@ var CQ = (function() {
   function renderCatStats() {
     var s = state.stats[state.cat];
     var acc = s.attempted > 0 ? Math.round((s.correct / s.attempted) * 100) : 0;
-    var grid = document.getElementById('cq-cat-stats-grid');
-    grid.innerHTML =
+    document.getElementById('cq-cat-stats-grid').innerHTML =
       '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Attempted</span><span class="cq-cat-stat-item-val">' + s.attempted + '</span></div>' +
       '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Correct</span><span class="cq-cat-stat-item-val" style="color:var(--green)">' + s.correct + '</span></div>' +
       '<div class="cq-cat-stat-item"><span class="cq-cat-stat-item-label">Wrong</span><span class="cq-cat-stat-item-val" style="color:var(--red)">' + s.wrong + '</span></div>' +
@@ -5833,9 +5805,7 @@ var CQ = (function() {
   }
 
   // ── ANSWER CHECK ──────────────────────────────────────
-  function normalise(v) {
-    return v.trim().replace(/\s+/g, '').toUpperCase();
-  }
+  function normalise(v) { return v.trim().replace(/\s+/g,'').toUpperCase(); }
 
   function checkAnswer() {
     if (state.answered || !state.current) return;
@@ -5843,28 +5813,19 @@ var CQ = (function() {
     var userRaw = inp.value.trim();
     if (!userRaw) { inp.focus(); return; }
 
-    var userNorm = normalise(userRaw);
-    var correct = state.current.accept.some(function(a) {
-      return normalise(a) === userNorm;
-    });
-
+    clearTimer();
     state.answered = true;
+    var userNorm = normalise(userRaw);
+    var correct = state.current.accept.some(function(a) { return normalise(a) === userNorm; });
 
     var ss = getSessionStats();
     ss.attempted++;
-    if (correct) { ss.correct++; ss.streak++; }
-    else         { ss.wrong++;   ss.streak = 0; }
+    if (correct) { ss.correct++; ss.streak++; } else { ss.wrong++; ss.streak = 0; }
 
     var ps = state.stats[state.cat];
     ps.attempted++;
-    if (correct) {
-      ps.correct++;
-      ps.streak++;
-      if (ps.streak > ps.bestStreak) ps.bestStreak = ps.streak;
-    } else {
-      ps.wrong++;
-      ps.streak = 0;
-    }
+    if (correct) { ps.correct++; ps.streak++; if (ps.streak > ps.bestStreak) ps.bestStreak = ps.streak; }
+    else         { ps.wrong++;   ps.streak = 0; }
     saveStats();
     renderCatStats();
 
@@ -5872,25 +5833,22 @@ var CQ = (function() {
     document.getElementById('cq-submit-btn').disabled = true;
 
     var feedbackEl = document.getElementById('cq-feedback');
-    var iconEl     = document.getElementById('cq-feedback-icon');
     var msgEl      = document.getElementById('cq-feedback-msg');
     var ansEl      = document.getElementById('cq-correct-ans');
-
     feedbackEl.style.display = 'block';
     if (correct) {
       inp.classList.add('cq-input-correct');
-      iconEl.textContent = '✅';
-      msgEl.textContent  = 'Correct!';
-      msgEl.className    = 'cq-feedback-msg correct';
-      ansEl.innerHTML    = '<strong>' + state.current.hint + '</strong>';
+      document.getElementById('cq-feedback-icon').textContent = '✅';
+      msgEl.textContent = 'Correct!';
+      msgEl.className   = 'cq-feedback-msg correct';
+      ansEl.innerHTML   = '<strong>' + state.current.hint + '</strong>';
     } else {
       inp.classList.add('cq-input-wrong');
-      iconEl.textContent = '❌';
-      msgEl.textContent  = 'Wrong — you wrote: ' + userRaw;
-      msgEl.className    = 'cq-feedback-msg wrong';
-      ansEl.innerHTML    = 'Answer: <strong>' + state.current.hint + '</strong>';
+      document.getElementById('cq-feedback-icon').textContent = '❌';
+      msgEl.textContent = 'Wrong — you wrote: ' + userRaw;
+      msgEl.className   = 'cq-feedback-msg wrong';
+      ansEl.innerHTML   = 'Answer: <strong>' + state.current.hint + '</strong>';
     }
-
     document.getElementById('cq-next-btn').style.display = 'block';
     renderSessionStats();
   }
@@ -5899,22 +5857,41 @@ var CQ = (function() {
   function init() {
     loadStats();
 
+    // open cheat quiz screen
     document.getElementById('btn-cheatquiz').addEventListener('click', function() {
       showScreen('cheatquiz');
-      state.cat = 'squares';
-      document.querySelectorAll('.cq-tab').forEach(function(t) {
-        t.classList.toggle('active', t.dataset.cat === 'squares');
-      });
+      state.cat  = 'squares';
+      state.mode = 'free';
+      document.querySelectorAll('.cq-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.cat === 'squares'); });
+      document.querySelectorAll('.cq-mode-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.mode === 'free'); });
+      document.getElementById('cq-timer-wrap').style.display = 'none';
       resetSessionStats();
       buildQueue();
       nextQuestion();
       renderCatStats();
     });
 
+    // back home — always clear timer
     document.getElementById('btn-cheatquiz-home').addEventListener('click', function() {
+      clearTimer();
       showScreen('home');
     });
 
+    // mode buttons
+    document.querySelectorAll('.cq-mode-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.cq-mode-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        state.mode = btn.dataset.mode;
+        document.getElementById('cq-timer-wrap').style.display = (state.mode === 'timed') ? 'flex' : 'none';
+        resetSessionStats();
+        buildQueue();
+        nextQuestion();
+        renderCatStats();
+      });
+    });
+
+    // category tabs
     document.querySelectorAll('.cq-tab').forEach(function(tab) {
       tab.addEventListener('click', function() {
         document.querySelectorAll('.cq-tab').forEach(function(t) { t.classList.remove('active'); });
@@ -5927,8 +5904,10 @@ var CQ = (function() {
       });
     });
 
+    // submit
     document.getElementById('cq-submit-btn').addEventListener('click', checkAnswer);
 
+    // Enter key
     document.getElementById('cq-answer-input').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         if (!state.answered) checkAnswer();
@@ -5936,10 +5915,10 @@ var CQ = (function() {
       }
     });
 
-    document.getElementById('cq-next-btn').addEventListener('click', function() {
-      nextQuestion();
-    });
+    // next button
+    document.getElementById('cq-next-btn').addEventListener('click', function() { nextQuestion(); });
 
+    // reset category stats
     document.getElementById('cq-reset-cat-btn').addEventListener('click', function() {
       if (!confirm('Reset all stats for "' + LABELS[state.cat] + '"?')) return;
       state.stats[state.cat] = { attempted: 0, correct: 0, wrong: 0, streak: 0, bestStreak: 0 };
@@ -5953,9 +5932,6 @@ var CQ = (function() {
 })();
 
 (function() {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', CQ.init);
-  } else {
-    CQ.init();
-  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', CQ.init); }
+  else { CQ.init(); }
 })();
