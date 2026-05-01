@@ -6,7 +6,7 @@
    + PDF Performance Report Export (jsPDF + Chart.js)
    + Dark mode ONLY (bluish theme)
    ============================================================ */
-
+   
 // ── Subject config ─────────────────────────────────────────
 const SUBJECTS = {
   maths: {
