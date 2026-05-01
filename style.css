@@ -4658,6 +4658,19 @@ canvas {
 }
 .cq-submit-btn:disabled { opacity: 0.4; }
 
+/* Fraction dual-box row */
+.cq-fraction-row { align-items: center; }
+.cq-frac-num { flex: 2; text-align: center; }
+.cq-frac-den { flex: 2; text-align: center; }
+.cq-frac-divider {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text);
+  padding: 0 4px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 /* Feedback */
 .cq-feedback {
   background: var(--bg);
