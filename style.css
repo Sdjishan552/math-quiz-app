@@ -4729,3 +4729,70 @@ canvas {
 .cq-cat-stat-item-label { font-size: 0.75rem; color: var(--muted); }
 .cq-cat-stat-item-val { font-size: 0.9rem; font-weight: 700; color: var(--text); }
 .cq-reset-btn { width: 100%; font-size: 0.8rem; margin-top: 4px; box-sizing: border-box; }
+
+
+/* Mode Toggle */
+.cq-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cq-mode-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+  text-align: center;
+}
+.cq-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(245,166,35,0.1);
+  font-weight: 800;
+}
+
+/* Timer Bar */
+.cq-timer-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cq-timer-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cq-timer-bar-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 10px;
+  background: rgb(100,220,60);
+  transition: width 0.05s linear, background 0.2s;
+}
+.cq-timer-bar-fill.cq-timer-urgent {
+  animation: cq-pulse 0.4s ease-in-out infinite alternate;
+}
+@keyframes cq-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+.cq-timer-label {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 20px;
+  text-align: right;
+}
