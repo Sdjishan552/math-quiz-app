@@ -607,7 +607,7 @@
       <div class="profile-hero-top">
         <div class="profile-hero-avatar" id="profile-hero-avatar">🧠</div>
         <div class="profile-hero-copy">
-          <div class="profile-hero-label">Your account space</div>
+          <div class="profile-hero-label">Player Profile</div>
           <div class="profile-hero-rank" id="profile-hero-rank">🥉 Novice · Lv.1</div>
           <div class="profile-hero-streak" id="profile-hero-streak">0 day streak · Goal 0 / 20</div>
         </div>
@@ -707,6 +707,21 @@
         <button class="profile-action-btn" id="btn-profile-open-bookmarks">🔖 Bookmarks</button>
         <button class="profile-action-btn" id="btn-profile-open-notes">📝 Notes</button>
         <button class="profile-action-btn" id="btn-profile-open-reports">📋 Reports</button>
+      </div>
+    </div>
+
+    <div class="home-card profile-heatmap-card">
+      <h2>📅 Activity Heatmap <span class="profile-heatmap-sub" id="heatmap-days-label">Last 90 days</span></h2>
+      <p class="profile-section-hint">Each square is a day — darker means more questions answered.</p>
+      <div class="profile-heatmap-wrap" id="profile-heatmap-wrap"></div>
+      <div class="profile-heatmap-legend">
+        <span class="heatmap-legend-label">Less</span>
+        <span class="heatmap-cell heatmap-l0"></span>
+        <span class="heatmap-cell heatmap-l1"></span>
+        <span class="heatmap-cell heatmap-l2"></span>
+        <span class="heatmap-cell heatmap-l3"></span>
+        <span class="heatmap-cell heatmap-l4"></span>
+        <span class="heatmap-legend-label">More</span>
       </div>
     </div>
 
@@ -1098,4 +1113,3 @@
 <script src="app.js"></script>
 </body>
 </html>
-
