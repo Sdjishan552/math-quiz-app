@@ -214,6 +214,18 @@
       </button>
     </div>
 
+    <div class="divider"></div>
+
+    <!-- Cheat Sheet Quiz -->
+    <button class="btn btn-cheatquiz-home" id="btn-cheatquiz">
+      <span class="btn-cheatquiz-icon">📐</span>
+      <span class="btn-cheatquiz-label">
+        <span class="btn-cheatquiz-title">Cheat Sheet Quiz</span>
+        <span class="btn-cheatquiz-sub">Squares · Cubes · Alphabets · Fractions</span>
+      </span>
+      <span class="btn-cheatquiz-badge">NEW</span>
+    </button>
+
     <button class="btn btn-notes-home" id="btn-notes">
       <span class="btn-notes-left">
         <span class="btn-notes-icon-wrap">📝</span>
@@ -806,6 +818,76 @@
     </div>
 
     <button class="btn btn-ghost" id="btn-bank-home">← Back to Home</button>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- CHEAT SHEET QUIZ SCREEN                               -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <section id="screen-cheatquiz" class="screen">
+
+    <!-- Header -->
+    <div class="cq-header">
+      <button class="btn btn-ghost cq-back-btn" id="btn-cheatquiz-home">← Home</button>
+      <h2 class="cq-title">📐 Cheat Sheet Quiz</h2>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="cq-tab-bar" id="cq-tab-bar">
+      <button class="cq-tab active" data-cat="squares">²  Squares</button>
+      <button class="cq-tab" data-cat="cubes">³  Cubes</button>
+      <button class="cq-tab" data-cat="alphabets">🔤 Alphabets</button>
+      <button class="cq-tab" data-cat="fractions">% Fractions</button>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="cq-stats-row" id="cq-stats-row">
+      <div class="cq-stat-box">
+        <span class="cq-stat-val" id="cq-stat-attempted">0</span>
+        <span class="cq-stat-label">Attempted</span>
+      </div>
+      <div class="cq-stat-box">
+        <span class="cq-stat-val cq-correct" id="cq-stat-correct">0</span>
+        <span class="cq-stat-label">Correct</span>
+      </div>
+      <div class="cq-stat-box">
+        <span class="cq-stat-val cq-wrong" id="cq-stat-wrong">0</span>
+        <span class="cq-stat-label">Wrong</span>
+      </div>
+      <div class="cq-stat-box">
+        <span class="cq-stat-val cq-streak" id="cq-stat-streak">0🔥</span>
+        <span class="cq-stat-label">Streak</span>
+      </div>
+    </div>
+
+    <!-- Quiz Card -->
+    <div class="cq-card" id="cq-card">
+      <div class="cq-question-label" id="cq-question-label">Category</div>
+      <div class="cq-question" id="cq-question">Question appears here</div>
+
+      <div class="cq-input-row">
+        <input class="cq-answer-input" id="cq-answer-input" type="text" inputmode="decimal" placeholder="Type your answer…" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <button class="btn cq-submit-btn" id="cq-submit-btn">✓</button>
+      </div>
+
+      <!-- Feedback -->
+      <div class="cq-feedback" id="cq-feedback" style="display:none">
+        <div class="cq-feedback-icon" id="cq-feedback-icon"></div>
+        <div class="cq-feedback-msg" id="cq-feedback-msg"></div>
+        <div class="cq-correct-ans" id="cq-correct-ans"></div>
+      </div>
+
+      <button class="btn cq-next-btn" id="cq-next-btn" style="display:none">Next Question →</button>
+    </div>
+
+    <!-- Category Stats Detail -->
+    <div class="cq-cat-stats-card" id="cq-cat-stats-card">
+      <div class="cq-cat-stats-title">📊 This Category Stats</div>
+      <div class="cq-cat-stats-grid" id="cq-cat-stats-grid">
+        <!-- filled by JS -->
+      </div>
+      <button class="btn btn-ghost cq-reset-btn" id="cq-reset-cat-btn">🗑 Reset This Category</button>
+    </div>
 
   </section>
 
